@@ -1,0 +1,13 @@
+{
+  "name": "punkty-squash-zeppos",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Zepp OS pilot for Punkty Squash",
+  "dependencies": {
+    "@zeppos/zml": "^0.0.41"
+  },
+  "scripts": {
+    "build": "zeus build",
+    "preview": "zeus preview"
+  }
+}

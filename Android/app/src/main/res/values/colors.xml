@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background">#101216</color>
+    <color name="player_one">#1677FF</color>
+    <color name="player_two">#F05252</color>
+    <color name="surface">#1B2028</color>
+    <color name="text_primary">#F5F7FA</color>
+    <color name="text_secondary">#B5BEC9</color>
+</resources>

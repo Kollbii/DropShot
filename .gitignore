@@ -1,0 +1,16 @@
+# OS
+.DS_Store
+
+# Android / Gradle
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+.cxx/
+.externalNativeBuild/
+
+# Node / ZeppOS
+node_modules/
+npm-debug.log*

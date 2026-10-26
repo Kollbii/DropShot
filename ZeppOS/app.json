@@ -1,0 +1,33 @@
+{
+  "configVersion": "v3",
+  "app": {
+    "appId": 20001,
+    "appName": "Punkty Squash",
+    "appType": "app",
+    "version": { "code": 3, "name": "1.0.2" },
+    "icon": "icon.png",
+    "vender": "Maciek",
+    "description": "Pilot do aplikacji Punkty Squash"
+  },
+  "permissions": ["data:os.device.info"],
+  "runtime": {
+    "apiVersion": { "compatible": "4.0", "target": "4.2", "minVersion": "4.0" }
+  },
+  "i18n": {
+    "en-US": { "appName": "Squash Remote" },
+    "pl-PL": { "appName": "Punkty Squash" }
+  },
+  "defaultLanguage": "en-US",
+  "targets": {
+    "common": {
+      "module": {
+        "page": { "pages": ["page/index"] },
+        "app-side": { "path": "app-side/index" }
+      },
+      "platforms": [
+        { "st": "r", "dw": 466 },
+        { "st": "s", "dw": 390 }
+      ]
+    }
+  }
+}

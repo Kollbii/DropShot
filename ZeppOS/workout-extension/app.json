@@ -1,0 +1,52 @@
+{
+  "configVersion": "v3",
+  "app": {
+    "appId": 20002,
+    "appName": "Punkty Squash Trening",
+    "appType": "app",
+    "extType": "workout",
+    "version": { "code": 8, "name": "1.0.7" },
+    "icon": "icon.png",
+    "vender": "Maciek",
+    "description": "Pilot wyniku Squash jako strona treningu"
+  },
+  "permissions": [],
+  "runtime": {
+    "apiVersion": { "compatible": "3.6", "target": "4.2", "minVersion": "3.6" }
+  },
+  "targets": {
+    "common": {
+      "module": {
+        "data-widget": {
+          "widgets": [
+            {
+              "path": "data-widget/common/index",
+              "name": "Punkty Squash",
+              "icon": "icon.png",
+              "window": { "isPinned": 1 },
+              "runtime": {
+                "ability": [
+                  { "type": 1, "subType": [81] }
+                ]
+              }
+            }
+          ]
+        },
+        "app-side": { "path": "app-side/index" }
+      },
+      "platforms": [
+        { "st": "r", "dw": 466 }
+      ],
+      "designWidth": 466
+    }
+  },
+  "i18n": {
+    "en-US": {
+      "data-widget": { "widgets": [{ "name": "Squash Score" }] }
+    },
+    "pl-PL": {
+      "data-widget": { "widgets": [{ "name": "Punkty Squash" }] }
+    }
+  },
+  "defaultLanguage": "pl-PL"
+}
