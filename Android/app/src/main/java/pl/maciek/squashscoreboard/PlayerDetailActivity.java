@@ -1,9 +1,218 @@
 package pl.maciek.squashscoreboard;
 
-import android.app.*;import android.graphics.Color;import android.graphics.drawable.GradientDrawable;import android.os.Bundle;import android.view.*;import android.widget.*;import java.util.*;
-public class PlayerDetailActivity extends Activity{
- private PlayerProfile profile;private boolean dark;private int bg,fg,muted,card;
- @Override public void onCreate(Bundle b){super.onCreate(b);draw();}@Override protected void onResume(){super.onResume();draw();}
- private void draw(){profile=ProfileStore.find(this,getIntent().getStringExtra("profile"));if(profile==null){finish();return;}dark=AppPreferences.dark(this);bg=dark?Color.rgb(13,16,22):Color.rgb(245,247,250);fg=dark?Color.WHITE:Color.rgb(24,30,40);muted=dark?Color.rgb(174,185,201):Color.rgb(80,92,108);card=dark?Color.rgb(28,34,44):Color.WHITE;PlayerStatistics.Summary s=PlayerStatistics.calculate(this,profile);LinearLayout root=box(bg);root.setPadding(dp(18),dp(12),dp(18),dp(12));TextView back=t("<  GRACZE",17,muted);back.setOnClickListener(v->finish());root.addView(back,new LinearLayout.LayoutParams(-1,dp(34)));ScrollView scroll=new ScrollView(this);LinearLayout content=box(bg);TextView title=t("●  "+profile.name,28,profile.color);content.addView(title,new LinearLayout.LayoutParams(-1,dp(50)));content.addView(t("Mecze: "+s.matches+"    Wygrane: "+s.wins+" ("+pct(s.wins,s.matches)+"%)",20,fg));content.addView(t("Srednia punktow na mecz: "+avg(s.points,s.matches),20,fg));content.addView(t("Srednia punktow na set: "+avg(s.points,s.totalSets),20,fg));content.addView(t("Srednia wygranych setow na mecz: "+avg(s.wonSets,s.matches),20,fg));content.addView(t("Punkty ustawiajace 6-7 / 7-6: "+s.score67,20,fg));content.addView(t("Punkty ustawiajace 6-9 / 9-6: "+s.score69,20,fg));Button edit=button("EDYTUJ PROFIL",profile.color);edit.setOnClickListener(v->editProfile());LinearLayout.LayoutParams ep=new LinearLayout.LayoutParams(-1,dp(52));ep.topMargin=dp(18);content.addView(edit,ep);Button del=button("USUN PROFIL",Color.rgb(180,65,65));del.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Usunac profil?").setMessage("Historia meczow pozostanie zapisana, ale profil zniknie z listy statystyk.").setNegativeButton("ANULUJ",null).setPositiveButton("USUN",(x,y)->{ProfileStore.remove(this,profile.id);finish();}).show());LinearLayout.LayoutParams dpv=new LinearLayout.LayoutParams(-1,dp(52));dpv.topMargin=dp(8);content.addView(del,dpv);scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);}
- private void editProfile(){LinearLayout form=box(card);EditText name=new EditText(this);name.setText(profile.name);name.setTextColor(fg);name.setSingleLine(true);Spinner color=spinner(colorIndex(profile.color));form.addView(name,new LinearLayout.LayoutParams(-1,dp(52)));form.addView(color,new LinearLayout.LayoutParams(-1,dp(52)));new AlertDialog.Builder(this).setTitle("Edytuj profil").setView(form).setNegativeButton("ANULUJ",null).setPositiveButton("ZAPISZ",(d,w)->{String n=name.getText().toString().trim();PlayerProfile duplicate=ProfileStore.findByName(this,n);if(n.isEmpty()||(duplicate!=null&&!duplicate.id.equals(profile.id))){new AlertDialog.Builder(this).setMessage(n.isEmpty()?"Wpisz nazwe profilu.":"Profil o tej nazwie juz istnieje.").setPositiveButton("OK",null).show();return;}PlayerProfile changed=new PlayerProfile(profile.id,n,colorAt(color.getSelectedItemPosition()));ProfileStore.update(this,changed);MatchHistoryStore.renameProfile(this,profile.id,profile.name,n);draw();}).show();}
- private Spinner spinner(int selected){String[] labels={"Niebieski","Czerwony","Zielony","Zloty"};ArrayAdapter<String>a=new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,labels){@Override public View getView(int p,View v,ViewGroup parent){TextView t=(TextView)super.getView(p,v,parent);t.setTextColor(fg);return t;}@Override public View getDropDownView(int p,View v,ViewGroup parent){TextView t=(TextView)super.getDropDownView(p,v,parent);t.setTextColor(fg);t.setBackgroundColor(card);return t;}};Spinner s=new Spinner(this);s.setAdapter(a);s.setSelection(selected);return s;}private int colorAt(int i){return new int[]{AppPreferences.BLUE,AppPreferences.RED,AppPreferences.GREEN,AppPreferences.GOLD}[i];}private int colorIndex(int c){for(int i=0;i<4;i++)if(colorAt(i)==c)return i;return 0;}private LinearLayout box(int c){LinearLayout x=new LinearLayout(this);x.setOrientation(LinearLayout.VERTICAL);x.setBackgroundColor(c);return x;}private TextView t(String a,int b,int c){TextView v=new TextView(this);v.setText(a);v.setTextSize(b);v.setTextColor(c);v.setGravity(Gravity.CENTER_VERTICAL);v.setPadding(0,dp(8),0,dp(8));return v;}private Button button(String label,int color){Button b=new Button(this);b.setText(label);b.setTextColor(Color.WHITE);GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(dp(12));b.setBackground(g);return b;}private String avg(int a,int b){return b==0?"0":String.format(Locale.US,"%.1f",a/(float)b);}private String pct(int a,int b){return b==0?"0":String.valueOf(Math.round(a*100f/b));}private int dp(int x){return(int)(x*getResources().getDisplayMetrics().density+.5f);}}
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.res.Configuration;
+import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
+import android.os.Bundle;
+import android.text.InputType;
+import android.view.Gravity;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.Spinner;
+import android.widget.TextView;
+import java.util.Locale;
+
+public class PlayerDetailActivity extends Activity {
+    private PlayerProfile profile;
+    private UiTheme theme;
+
+    @Override
+    public void onCreate(Bundle b) {
+        super.onCreate(b);
+        draw();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        draw();
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        draw();
+    }
+
+    private void draw() {
+        profile = ProfileStore.find(this, getIntent().getStringExtra("profile"));
+        if (profile == null) {
+            finish();
+            return;
+        }
+        theme = new UiTheme(this);
+        PlayerStatistics.Summary s = PlayerStatistics.calculate(this, profile);
+        int accent = theme.playerAccentOnSurface(profile.color);
+
+        LinearLayout root = box(theme.background);
+        root.setPadding(dp(16), dp(12), dp(16), dp(12));
+
+        // Top Bar
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+
+        Button back = theme.outlinedButton(this, "← Go back");
+        back.setContentDescription("Go back.");
+        back.setOnClickListener(v -> finish());
+
+        TextView title = t(
+            UiTheme.playerSymbol(profile.color) + "  " + profile.name + "  (Color: " + UiTheme.playerColorName(profile.color) + ")",
+            24,
+            accent
+        );
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setPadding(dp(16), 0, dp(16), 0);
+
+        Button edit = theme.tonalButton(this, "Edit player");
+        edit.setOnClickListener(v -> editProfile());
+
+        Button del = theme.dangerButton(this, "Delete player");
+        del.setOnClickListener(v ->
+            new AlertDialog.Builder(this)
+                .setTitle("Delete this player profile?")
+                .setMessage("The match history will stay on the device, but " + profile.name + " will not appear in the player list.")
+                .setNegativeButton("Cancel action", null)
+                .setPositiveButton("Delete player", (x, y) -> {
+                    ProfileStore.remove(this, profile.id);
+                    finish();
+                })
+                .show()
+        );
+
+        header.addView(back, new LinearLayout.LayoutParams(-2, dp(48)));
+        header.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        header.addView(edit, btnMargin());
+        header.addView(del, btnMargin());
+        root.addView(header, new LinearLayout.LayoutParams(-1, dp(52)));
+
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout content = box(theme.background);
+        content.setPadding(0, dp(12), 0, dp(12));
+
+        addStatCard(content, "Matches: " + s.matches + "   ·   Wins: " + s.wins + " (Win rate: " + pct(s.wins, s.matches) + "%)");
+        addStatCard(content, "Points won: " + s.points + "   ·   Average points per match: " + avg(s.points, s.matches));
+        addStatCard(content, "Average points per game: " + avg(s.points, s.totalSets) + "   ·   Average games won per match: " + avg(s.wonSets, s.matches));
+        addStatCard(content, "Points to 6-7 or 7-6: " + s.score67 + "   ·   Points to 6-9 or 9-6: " + s.score69);
+
+        scroll.addView(content);
+        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+        setContentView(root);
+    }
+
+    private LinearLayout.LayoutParams btnMargin() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(48));
+        lp.leftMargin = dp(8);
+        return lp;
+    }
+
+    private void addStatCard(LinearLayout parent, String textValue) {
+        TextView card = t(textValue, 18, theme.onSurface);
+        UiTheme.applyTabularNumbers(card);
+        card.setPadding(dp(18), dp(14), dp(18), dp(14));
+        card.setBackground(theme.roundedBox(theme.surfaceLow, 12, 1, theme.outlineVariant, this));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, dp(4), 0, dp(4));
+        parent.addView(card, lp);
+    }
+
+    private void editProfile() {
+        LinearLayout form = box(theme.surface);
+        form.setPadding(dp(20), dp(12), dp(20), dp(12));
+
+        EditText name = theme.editField(this, profile.name, "Player name", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        Spinner color = theme.styledSpinner(this, UiTheme.playerColorNames(), colorIndex(profile.color));
+
+        TextView nameLabel = t("Player name", 16, theme.onSurfaceVariant);
+        TextView colorLabel = t("Player color", 16, theme.onSurfaceVariant);
+
+        form.addView(nameLabel);
+        form.addView(name, new LinearLayout.LayoutParams(-1, dp(48)));
+        form.addView(colorLabel);
+        form.addView(color, new LinearLayout.LayoutParams(-1, dp(48)));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Edit player")
+            .setView(form)
+            .setNegativeButton("Cancel action", null)
+            .setPositiveButton("Save player", null)
+            .create();
+
+        dialog.setOnShowListener(ignored -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(new ColorDrawable(theme.surface));
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(theme.primary);
+            Button saveBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            saveBtn.setTextColor(theme.primary);
+            saveBtn.setOnClickListener(v -> {
+                String n = name.getText().toString().trim();
+                if (n.isEmpty()) {
+                    new AlertDialog.Builder(this)
+                        .setTitle("Empty player name")
+                        .setMessage("The player name is empty. Each player profile must have a name. Enter a name in the text field.")
+                        .setPositiveButton("Close dialog", null)
+                        .show();
+                    return;
+                }
+                PlayerProfile duplicate = ProfileStore.findByName(this, n);
+                if (duplicate != null && !duplicate.id.equals(profile.id)) {
+                    new AlertDialog.Builder(this)
+                        .setTitle("Duplicate player name")
+                        .setMessage("This player name already exists. Each player profile must have a unique name. Enter a different name.")
+                        .setPositiveButton("Close dialog", null)
+                        .show();
+                    return;
+                }
+                PlayerProfile changed = new PlayerProfile(profile.id, n, colorAt(color.getSelectedItemPosition()));
+                ProfileStore.update(this, changed);
+                MatchHistoryStore.renameProfile(this, profile.id, profile.name, n);
+                dialog.dismiss();
+                draw();
+            });
+        });
+        dialog.show();
+    }
+
+    private int colorAt(int i) {
+        return UiTheme.playerColors()[i];
+    }
+
+    private int colorIndex(int c) {
+        int[] all = UiTheme.playerColors();
+        for (int i = 0; i < all.length; i++) if (all[i] == c) return i;
+        return 0;
+    }
+
+    private LinearLayout box(int c) {
+        LinearLayout x = new LinearLayout(this);
+        x.setOrientation(LinearLayout.VERTICAL);
+        x.setBackgroundColor(c);
+        return x;
+    }
+
+    private TextView t(String a, int b, int c) {
+        TextView v = new TextView(this);
+        v.setText(a);
+        v.setTextSize(b);
+        v.setTextColor(c);
+        v.setGravity(Gravity.CENTER_VERTICAL);
+        v.setPadding(0, dp(6), 0, dp(6));
+        return v;
+    }
+
+    private String avg(int a, int b) {
+        return b == 0 ? "0.0" : String.format(Locale.US, "%.1f", a / (float) b);
+    }
+
+    private String pct(int a, int b) {
+        return b == 0 ? "0" : String.valueOf(Math.round(a * 100f / b));
+    }
+
+    private int dp(int x) {
+        return (int) (x * getResources().getDisplayMetrics().density + 0.5f);
+    }
+}

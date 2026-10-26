@@ -1,0 +1,801 @@
+{
+  "meta": {
+    "name": "DropShot",
+    "version": "1.0.0",
+    "designSystem": "Material Design 3",
+    "toneModel": "Tone = CIE L*. Hue and chroma in CIE LCh(ab), chroma reduced to fit sRGB."
+  },
+  "color": {
+    "palette": {
+      "primary": {
+        "0": "#000000",
+        "10": "#321200",
+        "20": "#5B1B00",
+        "30": "#852400",
+        "40": "#AF3000",
+        "50": "#CE4C1C",
+        "60": "#EE6735",
+        "70": "#FF8C60",
+        "80": "#FFB59A",
+        "90": "#FFDBCE",
+        "95": "#FFEDE7",
+        "99": "#FFFBFA",
+        "100": "#FFFFFF"
+      },
+      "secondary": {
+        "0": "#000000",
+        "10": "#2C1700",
+        "20": "#432B19",
+        "30": "#5B412F",
+        "40": "#755945",
+        "50": "#8F715D",
+        "60": "#AA8B75",
+        "70": "#C5A58F",
+        "80": "#E2C0A9",
+        "90": "#FFDCC5",
+        "95": "#FFEDE2",
+        "99": "#FFFCF9",
+        "100": "#FFFFFF"
+      },
+      "tertiary": {
+        "0": "#000000",
+        "10": "#001F23",
+        "20": "#00363B",
+        "30": "#004F56",
+        "40": "#006972",
+        "50": "#19838D",
+        "60": "#3E9DA8",
+        "70": "#5DB9C3",
+        "80": "#79D4DF",
+        "90": "#96F1FC",
+        "95": "#CAF9FF",
+        "99": "#F5FEFF",
+        "100": "#FFFFFF"
+      },
+      "neutral": {
+        "0": "#000000",
+        "4": "#120E05",
+        "6": "#16130C",
+        "10": "#1E1B16",
+        "12": "#221F1A",
+        "17": "#2C2A24",
+        "20": "#33302B",
+        "22": "#37342F",
+        "24": "#3C3933",
+        "30": "#494640",
+        "40": "#615E58",
+        "50": "#7A7770",
+        "60": "#94908A",
+        "70": "#AEABA4",
+        "80": "#CAC6BF",
+        "87": "#DDDAD2",
+        "90": "#E6E2DB",
+        "92": "#ECE8E0",
+        "94": "#F1EDE6",
+        "95": "#F4F0E9",
+        "96": "#F7F3EC",
+        "98": "#FDF9F2",
+        "99": "#FFFCF6",
+        "100": "#FFFFFF"
+      },
+      "neutralVariant": {
+        "0": "#000000",
+        "10": "#201B0E",
+        "20": "#363023",
+        "30": "#4C4639",
+        "40": "#655E50",
+        "50": "#7E7668",
+        "60": "#989081",
+        "70": "#B2AA9B",
+        "80": "#CEC6B6",
+        "90": "#EAE2D1",
+        "95": "#F9F0DF",
+        "99": "#FFFCF6",
+        "100": "#FFFFFF"
+      },
+      "error": {
+        "0": "#000000",
+        "10": "#380C00",
+        "20": "#690000",
+        "30": "#93000B",
+        "40": "#BF0312",
+        "50": "#E03429",
+        "60": "#FF5542",
+        "70": "#FF8A75",
+        "80": "#FFB4A5",
+        "90": "#FFDAD3",
+        "95": "#FFEDE9",
+        "99": "#FFFBFB",
+        "100": "#FFFFFF"
+      },
+      "success": {
+        "0": "#000000",
+        "10": "#062100",
+        "20": "#003908",
+        "30": "#005312",
+        "40": "#206C26",
+        "50": "#3D863E",
+        "60": "#58A156",
+        "70": "#72BC6F",
+        "80": "#8ED889",
+        "90": "#A9F5A4",
+        "95": "#C8FFC2",
+        "99": "#F5FFF3",
+        "100": "#FFFFFF"
+      },
+      "warning": {
+        "0": "#000000",
+        "10": "#291800",
+        "20": "#482900",
+        "30": "#683D00",
+        "40": "#895100",
+        "50": "#AC6700",
+        "60": "#CA8023",
+        "70": "#E99A3E",
+        "80": "#FFB86D",
+        "90": "#FFDCBD",
+        "95": "#FFEEDF",
+        "99": "#FFFCF9",
+        "100": "#FFFFFF"
+      },
+      "info": {
+        "0": "#000000",
+        "10": "#001A40",
+        "20": "#002F67",
+        "30": "#004491",
+        "40": "#225BB5",
+        "50": "#4874D1",
+        "60": "#678DEE",
+        "70": "#8DA8FF",
+        "80": "#B7C4FF",
+        "90": "#DCE1FF",
+        "95": "#EEF0FF",
+        "99": "#FCFCFF",
+        "100": "#FFFFFF"
+      },
+      "playerBlue": {
+        "0": "#000000",
+        "10": "#001B3F",
+        "20": "#002F66",
+        "30": "#004590",
+        "40": "#005CBC",
+        "50": "#0074EA",
+        "60": "#538DFF",
+        "70": "#8CA8FF",
+        "80": "#B7C4FF",
+        "90": "#DCE1FF",
+        "95": "#EEF0FF",
+        "99": "#FCFCFF",
+        "100": "#FFFFFF"
+      },
+      "playerRed": {
+        "0": "#000000",
+        "10": "#400100",
+        "20": "#680012",
+        "30": "#92001D",
+        "40": "#BB152C",
+        "50": "#DA3A43",
+        "60": "#FA585A",
+        "70": "#FF8983",
+        "80": "#FFB3AD",
+        "90": "#FFDAD6",
+        "95": "#FFEDEB",
+        "99": "#FFFBFB",
+        "100": "#FFFFFF"
+      },
+      "playerGreen": {
+        "0": "#000000",
+        "10": "#002112",
+        "20": "#003822",
+        "30": "#005233",
+        "40": "#006C45",
+        "50": "#008858",
+        "60": "#00A56B",
+        "70": "#36C184",
+        "80": "#58DE9E",
+        "90": "#77FBBA",
+        "95": "#BEFFDB",
+        "99": "#F3FFF8",
+        "100": "#FFFFFF"
+      },
+      "playerGold": {
+        "0": "#000000",
+        "10": "#251A00",
+        "20": "#402D00",
+        "30": "#5C4200",
+        "40": "#7A5900",
+        "50": "#997000",
+        "60": "#B98900",
+        "70": "#D8A21A",
+        "80": "#F7BD3B",
+        "90": "#FFDEA8",
+        "95": "#FFEFD7",
+        "99": "#FFFCF7",
+        "100": "#FFFFFF"
+      }
+    },
+    "seed": {
+      "primary": "#D9501E",
+      "secondary": "#7A5B45",
+      "tertiary": "#0F7C86",
+      "neutral": "#FBF5EA",
+      "neutralVariant": "#FBF5EA",
+      "error": "#B3261E",
+      "success": "#2E7D32",
+      "warning": "#B26B00",
+      "info": "#1F63C6",
+      "playerBlue": "#3184FF",
+      "playerRed": "#F45C5C",
+      "playerGreen": "#39B87F",
+      "playerGold": "#FFC857"
+    },
+    "scheme": {
+      "light": {
+        "primary": "#AF3000",
+        "onPrimary": "#FFFFFF",
+        "primaryContainer": "#FFDBCE",
+        "onPrimaryContainer": "#321200",
+        "secondary": "#755945",
+        "onSecondary": "#FFFFFF",
+        "secondaryContainer": "#FFDCC5",
+        "onSecondaryContainer": "#2C1700",
+        "tertiary": "#006972",
+        "onTertiary": "#FFFFFF",
+        "tertiaryContainer": "#96F1FC",
+        "onTertiaryContainer": "#001F23",
+        "error": "#BF0312",
+        "onError": "#FFFFFF",
+        "errorContainer": "#FFDAD3",
+        "onErrorContainer": "#380C00",
+        "background": "#FDF9F2",
+        "onBackground": "#1E1B16",
+        "surface": "#FDF9F2",
+        "onSurface": "#1E1B16",
+        "surfaceVariant": "#EAE2D1",
+        "onSurfaceVariant": "#4C4639",
+        "outline": "#7E7668",
+        "outlineVariant": "#CEC6B6",
+        "inverseSurface": "#33302B",
+        "inverseOnSurface": "#F4F0E9",
+        "inversePrimary": "#FFB59A",
+        "surfaceDim": "#DDDAD2",
+        "surfaceBright": "#FDF9F2",
+        "surfaceContainerLowest": "#FFFFFF",
+        "surfaceContainerLow": "#F7F3EC",
+        "surfaceContainer": "#F1EDE6",
+        "surfaceContainerHigh": "#ECE8E0",
+        "surfaceContainerHighest": "#E6E2DB",
+        "surfaceTint": "#AF3000",
+        "scrim": "#000000",
+        "shadow": "#000000"
+      },
+      "dark": {
+        "primary": "#FFB59A",
+        "onPrimary": "#5B1B00",
+        "primaryContainer": "#852400",
+        "onPrimaryContainer": "#FFDBCE",
+        "secondary": "#E2C0A9",
+        "onSecondary": "#432B19",
+        "secondaryContainer": "#5B412F",
+        "onSecondaryContainer": "#FFDCC5",
+        "tertiary": "#79D4DF",
+        "onTertiary": "#00363B",
+        "tertiaryContainer": "#004F56",
+        "onTertiaryContainer": "#96F1FC",
+        "error": "#FFB4A5",
+        "onError": "#690000",
+        "errorContainer": "#93000B",
+        "onErrorContainer": "#FFDAD3",
+        "background": "#16130C",
+        "onBackground": "#E6E2DB",
+        "surface": "#16130C",
+        "onSurface": "#E6E2DB",
+        "surfaceVariant": "#4C4639",
+        "onSurfaceVariant": "#CEC6B6",
+        "outline": "#989081",
+        "outlineVariant": "#4C4639",
+        "inverseSurface": "#E6E2DB",
+        "inverseOnSurface": "#33302B",
+        "inversePrimary": "#AF3000",
+        "surfaceDim": "#16130C",
+        "surfaceBright": "#3C3933",
+        "surfaceContainerLowest": "#120E05",
+        "surfaceContainerLow": "#1E1B16",
+        "surfaceContainer": "#221F1A",
+        "surfaceContainerHigh": "#2C2A24",
+        "surfaceContainerHighest": "#37342F",
+        "surfaceTint": "#FFB59A",
+        "scrim": "#000000",
+        "shadow": "#000000"
+      },
+      "lightHighContrast": {
+        "primary": "#5B1B00",
+        "onPrimary": "#FFFFFF",
+        "primaryContainer": "#852400",
+        "onPrimaryContainer": "#FFFFFF",
+        "secondary": "#432B19",
+        "onSecondary": "#FFFFFF",
+        "secondaryContainer": "#5B412F",
+        "onSecondaryContainer": "#FFFFFF",
+        "tertiary": "#00363B",
+        "onTertiary": "#FFFFFF",
+        "tertiaryContainer": "#004F56",
+        "onTertiaryContainer": "#FFFFFF",
+        "error": "#690000",
+        "onError": "#FFFFFF",
+        "errorContainer": "#93000B",
+        "onErrorContainer": "#FFFFFF",
+        "background": "#FDF9F2",
+        "onBackground": "#000000",
+        "surface": "#FDF9F2",
+        "onSurface": "#000000",
+        "surfaceVariant": "#EAE2D1",
+        "onSurfaceVariant": "#201B0E",
+        "outline": "#363023",
+        "outlineVariant": "#4C4639",
+        "inverseSurface": "#33302B",
+        "inverseOnSurface": "#FFFFFF",
+        "inversePrimary": "#FFDBCE",
+        "surfaceDim": "#DDDAD2",
+        "surfaceBright": "#FDF9F2",
+        "surfaceContainerLowest": "#FFFFFF",
+        "surfaceContainerLow": "#F7F3EC",
+        "surfaceContainer": "#F1EDE6",
+        "surfaceContainerHigh": "#ECE8E0",
+        "surfaceContainerHighest": "#E6E2DB",
+        "surfaceTint": "#5B1B00",
+        "scrim": "#000000",
+        "shadow": "#000000"
+      },
+      "darkHighContrast": {
+        "primary": "#FFDBCE",
+        "onPrimary": "#000000",
+        "primaryContainer": "#FFB59A",
+        "onPrimaryContainer": "#000000",
+        "secondary": "#FFDCC5",
+        "onSecondary": "#000000",
+        "secondaryContainer": "#E2C0A9",
+        "onSecondaryContainer": "#000000",
+        "tertiary": "#96F1FC",
+        "onTertiary": "#000000",
+        "tertiaryContainer": "#79D4DF",
+        "onTertiaryContainer": "#000000",
+        "error": "#FFDAD3",
+        "onError": "#000000",
+        "errorContainer": "#FFB4A5",
+        "onErrorContainer": "#000000",
+        "background": "#16130C",
+        "onBackground": "#FFFFFF",
+        "surface": "#16130C",
+        "onSurface": "#FFFFFF",
+        "surfaceVariant": "#4C4639",
+        "onSurfaceVariant": "#F9F0DF",
+        "outline": "#EAE2D1",
+        "outlineVariant": "#CEC6B6",
+        "inverseSurface": "#E6E2DB",
+        "inverseOnSurface": "#000000",
+        "inversePrimary": "#852400",
+        "surfaceDim": "#16130C",
+        "surfaceBright": "#3C3933",
+        "surfaceContainerLowest": "#120E05",
+        "surfaceContainerLow": "#1E1B16",
+        "surfaceContainer": "#221F1A",
+        "surfaceContainerHigh": "#2C2A24",
+        "surfaceContainerHighest": "#37342F",
+        "surfaceTint": "#FFDBCE",
+        "scrim": "#000000",
+        "shadow": "#000000"
+      }
+    },
+    "semantic": {
+      "light": {
+        "success": {
+          "color": "#206C26",
+          "onColor": "#FFFFFF",
+          "container": "#A9F5A4",
+          "onContainer": "#062100"
+        },
+        "warning": {
+          "color": "#895100",
+          "onColor": "#FFFFFF",
+          "container": "#FFDCBD",
+          "onContainer": "#291800"
+        },
+        "info": {
+          "color": "#225BB5",
+          "onColor": "#FFFFFF",
+          "container": "#DCE1FF",
+          "onContainer": "#001A40"
+        },
+        "error": {
+          "color": "#BF0312",
+          "onColor": "#FFFFFF",
+          "container": "#FFDAD3",
+          "onContainer": "#380C00"
+        }
+      },
+      "dark": {
+        "success": {
+          "color": "#8ED889",
+          "onColor": "#003908",
+          "container": "#005312",
+          "onContainer": "#A9F5A4"
+        },
+        "warning": {
+          "color": "#FFB86D",
+          "onColor": "#482900",
+          "container": "#683D00",
+          "onContainer": "#FFDCBD"
+        },
+        "info": {
+          "color": "#B7C4FF",
+          "onColor": "#002F67",
+          "container": "#004491",
+          "onContainer": "#DCE1FF"
+        },
+        "error": {
+          "color": "#FFB4A5",
+          "onColor": "#690000",
+          "container": "#93000B",
+          "onContainer": "#FFDAD3"
+        }
+      },
+      "lightHighContrast": {
+        "success": {
+          "color": "#003908",
+          "onColor": "#FFFFFF",
+          "container": "#005312",
+          "onContainer": "#FFFFFF"
+        },
+        "warning": {
+          "color": "#482900",
+          "onColor": "#FFFFFF",
+          "container": "#683D00",
+          "onContainer": "#FFFFFF"
+        },
+        "info": {
+          "color": "#002F67",
+          "onColor": "#FFFFFF",
+          "container": "#004491",
+          "onContainer": "#FFFFFF"
+        },
+        "error": {
+          "color": "#690000",
+          "onColor": "#FFFFFF",
+          "container": "#93000B",
+          "onContainer": "#FFFFFF"
+        }
+      },
+      "darkHighContrast": {
+        "success": {
+          "color": "#A9F5A4",
+          "onColor": "#000000",
+          "container": "#8ED889",
+          "onContainer": "#000000"
+        },
+        "warning": {
+          "color": "#FFDCBD",
+          "onColor": "#000000",
+          "container": "#FFB86D",
+          "onContainer": "#000000"
+        },
+        "info": {
+          "color": "#DCE1FF",
+          "onColor": "#000000",
+          "container": "#B7C4FF",
+          "onContainer": "#000000"
+        },
+        "error": {
+          "color": "#FFDAD3",
+          "onColor": "#000000",
+          "container": "#FFB4A5",
+          "onContainer": "#000000"
+        }
+      }
+    },
+    "player": {
+      "light": {
+        "Blue": {
+          "fill": "#005CBC",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#005CBC"
+        },
+        "Red": {
+          "fill": "#BB152C",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#BB152C"
+        },
+        "Green": {
+          "fill": "#006C45",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#006C45"
+        },
+        "Gold": {
+          "fill": "#7A5900",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#7A5900"
+        }
+      },
+      "dark": {
+        "Blue": {
+          "fill": "#005CBC",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#B7C4FF"
+        },
+        "Red": {
+          "fill": "#BB152C",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#FFB3AD"
+        },
+        "Green": {
+          "fill": "#006C45",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#58DE9E"
+        },
+        "Gold": {
+          "fill": "#7A5900",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#F7BD3B"
+        }
+      },
+      "lightHighContrast": {
+        "Blue": {
+          "fill": "#004590",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#004590"
+        },
+        "Red": {
+          "fill": "#92001D",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#92001D"
+        },
+        "Green": {
+          "fill": "#005233",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#005233"
+        },
+        "Gold": {
+          "fill": "#5C4200",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#5C4200"
+        }
+      },
+      "darkHighContrast": {
+        "Blue": {
+          "fill": "#004590",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#DCE1FF"
+        },
+        "Red": {
+          "fill": "#92001D",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#FFDAD6"
+        },
+        "Green": {
+          "fill": "#005233",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#77FBBA"
+        },
+        "Gold": {
+          "fill": "#5C4200",
+          "onFill": "#FFFFFF",
+          "accentOnSurface": "#FFDEA8"
+        }
+      }
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "brand": "Roboto (system sans-serif, FontFamily.Default)",
+      "numerals": "Roboto with tabular figures (font feature \"tnum\")"
+    },
+    "styles": {
+      "displayLarge": {
+        "size": 57,
+        "lineHeight": 64,
+        "weight": 400,
+        "tracking": -0.25
+      },
+      "displayMedium": {
+        "size": 45,
+        "lineHeight": 52,
+        "weight": 400,
+        "tracking": 0
+      },
+      "displaySmall": {
+        "size": 36,
+        "lineHeight": 44,
+        "weight": 400,
+        "tracking": 0
+      },
+      "headlineLarge": {
+        "size": 32,
+        "lineHeight": 40,
+        "weight": 400,
+        "tracking": 0
+      },
+      "headlineMedium": {
+        "size": 28,
+        "lineHeight": 36,
+        "weight": 400,
+        "tracking": 0
+      },
+      "headlineSmall": {
+        "size": 24,
+        "lineHeight": 32,
+        "weight": 400,
+        "tracking": 0
+      },
+      "titleLarge": {
+        "size": 22,
+        "lineHeight": 28,
+        "weight": 500,
+        "tracking": 0
+      },
+      "titleMedium": {
+        "size": 18,
+        "lineHeight": 26,
+        "weight": 500,
+        "tracking": 0.15
+      },
+      "titleSmall": {
+        "size": 16,
+        "lineHeight": 24,
+        "weight": 500,
+        "tracking": 0.1
+      },
+      "bodyLarge": {
+        "size": 18,
+        "lineHeight": 28,
+        "weight": 400,
+        "tracking": 0.15
+      },
+      "bodyMedium": {
+        "size": 16,
+        "lineHeight": 24,
+        "weight": 400,
+        "tracking": 0.25
+      },
+      "bodySmall": {
+        "size": 16,
+        "lineHeight": 24,
+        "weight": 400,
+        "tracking": 0.4
+      },
+      "labelLarge": {
+        "size": 16,
+        "lineHeight": 24,
+        "weight": 500,
+        "tracking": 0.1
+      },
+      "labelMedium": {
+        "size": 14,
+        "lineHeight": 20,
+        "weight": 500,
+        "tracking": 0.5
+      },
+      "labelSmall": {
+        "size": 12,
+        "lineHeight": 16,
+        "weight": 500,
+        "tracking": 0.5
+      }
+    },
+    "custom": {
+      "scoreDisplay": {
+        "size": "fit to panel, 96 to 240",
+        "lineHeight": "1.0 x size",
+        "weight": 700,
+        "tracking": 0,
+        "features": "tnum"
+      },
+      "gameScore": {
+        "size": 32,
+        "lineHeight": 40,
+        "weight": 700,
+        "tracking": 0,
+        "features": "tnum"
+      },
+      "clock": {
+        "size": 22,
+        "lineHeight": 28,
+        "weight": 500,
+        "tracking": 0,
+        "features": "tnum"
+      }
+    },
+    "unit": "sp",
+    "maxFontScale": 2.0
+  },
+  "spacing": {
+    "unit": "dp",
+    "grid": 8,
+    "halfStep": 4,
+    "scale": {
+      "s0": 0,
+      "s1": 4,
+      "s2": 8,
+      "s3": 16,
+      "s4": 24,
+      "s5": 32,
+      "s6": 48,
+      "s7": 64
+    },
+    "touchTargetMin": 48,
+    "margin": {
+      "compact": 16,
+      "medium": 24,
+      "expanded": 24
+    },
+    "gutter": {
+      "compact": 8,
+      "medium": 16,
+      "expanded": 24
+    },
+    "columns": {
+      "compact": 4,
+      "medium": 8,
+      "expanded": 12
+    },
+    "windowWidth": {
+      "compact": "< 600",
+      "medium": "600 to 839",
+      "expanded": ">= 840"
+    },
+    "windowHeight": {
+      "compact": "< 480",
+      "medium": "480 to 899",
+      "expanded": ">= 900"
+    }
+  },
+  "shape": {
+    "unit": "dp",
+    "none": 0,
+    "extraSmall": 4,
+    "small": 8,
+    "medium": 12,
+    "large": 16,
+    "extraLarge": 28,
+    "full": "50%"
+  },
+  "elevation": {
+    "unit": "dp",
+    "level0": 0,
+    "level1": 1,
+    "level2": 3,
+    "level3": 6,
+    "level4": 8,
+    "level5": 12
+  },
+  "motion": {
+    "duration": {
+      "unit": "ms",
+      "short1": 50,
+      "short2": 100,
+      "short3": 150,
+      "short4": 200,
+      "medium1": 250,
+      "medium2": 300,
+      "medium3": 350,
+      "medium4": 400,
+      "long1": 450,
+      "long2": 500,
+      "long3": 550,
+      "long4": 600,
+      "extraLong1": 700,
+      "extraLong2": 800,
+      "extraLong3": 900,
+      "extraLong4": 1000
+    },
+    "easing": {
+      "emphasized": "cubic-bezier(0.2, 0.0, 0.0, 1.0)",
+      "emphasizedDecelerate": "cubic-bezier(0.05, 0.7, 0.1, 1.0)",
+      "emphasizedAccelerate": "cubic-bezier(0.3, 0.0, 0.8, 0.15)",
+      "standard": "cubic-bezier(0.2, 0.0, 0.0, 1.0)",
+      "standardDecelerate": "cubic-bezier(0.0, 0.0, 0.0, 1.0)",
+      "standardAccelerate": "cubic-bezier(0.3, 0.0, 1.0, 1.0)",
+      "linear": "cubic-bezier(0.0, 0.0, 1.0, 1.0)"
+    },
+    "reduceMotion": "If Settings.Global.ANIMATOR_DURATION_SCALE is 0, all durations are 0 ms and decorative effects are off."
+  }
+}

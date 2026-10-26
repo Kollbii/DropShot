@@ -1,12 +1,313 @@
 package pl.maciek.squashscoreboard;
 
-import android.app.*;import android.content.Intent;import android.graphics.Color;import android.graphics.drawable.GradientDrawable;import android.os.Bundle;import android.view.*;import android.widget.*;import java.util.*;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.content.res.Configuration;
+import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
+import android.os.Bundle;
+import android.text.InputType;
+import android.view.Gravity;
+import android.view.View;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.Spinner;
+import android.widget.TextView;
+import java.util.List;
+import java.util.Locale;
+
 public class PlayerStatsActivity extends Activity {
- private int bg,card,fg,muted; private boolean dark;
- @Override public void onCreate(Bundle b){super.onCreate(b);draw();}@Override protected void onResume(){super.onResume();draw();}
- private void draw(){dark=AppPreferences.dark(this);bg=dark?Color.rgb(13,16,22):Color.rgb(245,247,250);card=dark?Color.rgb(28,34,44):Color.WHITE;fg=dark?Color.WHITE:Color.rgb(24,30,40);muted=dark?Color.rgb(174,185,201):Color.rgb(80,92,108);List<PlayerProfile> profiles=ProfileStore.load(this);LinearLayout root=box(bg);root.setPadding(dp(18),dp(12),dp(18),dp(12));LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);TextView back=text("<  HISTORIA",17,muted);back.setOnClickListener(v->finish());TextView title=text("STATYSTYKI GRACZY",24,fg);title.setGravity(Gravity.CENTER);Button compare=smallButton("⇄","Porownaj dwoch graczy",Color.rgb(44,111,88));compare.setOnClickListener(v->chooseComparison(profiles));Button add=smallButton("+","Dodaj profil",AppPreferences.BLUE);add.setOnClickListener(v->addProfile());header.addView(back,new LinearLayout.LayoutParams(dp(110),-1));header.addView(title,new LinearLayout.LayoutParams(0,-1,1));header.addView(compare,new LinearLayout.LayoutParams(dp(42),-1));header.addView(add,new LinearLayout.LayoutParams(dp(42),-1));root.addView(header,new LinearLayout.LayoutParams(-1,dp(46)));ScrollView scroll=new ScrollView(this);LinearLayout list=box(bg);if(profiles.isEmpty()){TextView empty=text("Nie ma jeszcze zapisanych profili. Dodaj profil, aby liczyc jego statystyki.",18,muted);empty.setGravity(Gravity.CENTER);list.addView(empty,new LinearLayout.LayoutParams(-1,dp(120)));}for(PlayerProfile p:profiles)list.addView(profileRow(p),rowParams());scroll.addView(list);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);}
- private View profileRow(PlayerProfile p){PlayerStatistics.Summary s=PlayerStatistics.calculate(this,p);LinearLayout row=box(card);row.setPadding(dp(18),dp(7),dp(18),dp(7));GradientDrawable g=new GradientDrawable();g.setColor(card);g.setCornerRadius(dp(14));g.setStroke(dp(3),p.color);row.setBackground(g);TextView name=text("●  "+p.name,20,p.color);TextView basic=text("Mecze: "+s.matches+"    Wygrane: "+s.wins+"    Punkty: "+s.points,15,muted);TextView special=text("6-7 / 7-6: "+s.score67+"    6-9 / 9-6: "+s.score69,14,muted);row.addView(name,new LinearLayout.LayoutParams(-1,0,1));row.addView(basic,new LinearLayout.LayoutParams(-1,0,1));row.addView(special,new LinearLayout.LayoutParams(-1,0,1));row.setOnClickListener(v->startActivity(new Intent(this,PlayerDetailActivity.class).putExtra("profile",p.id)));return row;}
- private void chooseComparison(List<PlayerProfile> profiles){if(profiles.size()<2){new AlertDialog.Builder(this).setMessage("Dodaj co najmniej dwa profile, aby je porownac.").setPositiveButton("OK",null).show();return;}String[] names=new String[profiles.size()];for(int i=0;i<profiles.size();i++)names[i]=profiles.get(i).name;LinearLayout form=box(card);Spinner one=profileSpinner(names,0),two=profileSpinner(names,1);form.addView(label("Gracz 1"));form.addView(one,new LinearLayout.LayoutParams(-1,dp(48)));form.addView(label("Gracz 2"));form.addView(two,new LinearLayout.LayoutParams(-1,dp(48)));new AlertDialog.Builder(this).setTitle("Porownaj graczy").setView(form).setNegativeButton("ANULUJ",null).setPositiveButton("POKAZ",(d,w)->{if(one.getSelectedItemPosition()==two.getSelectedItemPosition()){new AlertDialog.Builder(this).setMessage("Wybierz dwa rozne profile.").setPositiveButton("OK",null).show();return;}startActivity(new Intent(this,PlayerComparisonActivity.class).putExtra("one",profiles.get(one.getSelectedItemPosition()).id).putExtra("two",profiles.get(two.getSelectedItemPosition()).id));}).show();}
- private void addProfile(){LinearLayout form=box(card);EditText name=field("Nazwa profilu");Spinner color=colorSpinner(0);form.addView(name,new LinearLayout.LayoutParams(-1,dp(52)));form.addView(color,new LinearLayout.LayoutParams(-1,dp(52)));new AlertDialog.Builder(this).setTitle("Dodaj profil").setView(form).setNegativeButton("ANULUJ",null).setPositiveButton("DODAJ",(d,w)->{String n=name.getText().toString().trim();if(n.isEmpty()||ProfileStore.findByName(this,n)!=null){new AlertDialog.Builder(this).setMessage(n.isEmpty()?"Wpisz nazwe profilu.":"Profil o tej nazwie juz istnieje.").setPositiveButton("OK",null).show();return;}ProfileStore.add(this,new PlayerProfile(n,colorAt(color.getSelectedItemPosition())));draw();}).show();}
- private TextView label(String s){TextView t=text(s,14,muted);t.setPadding(0,dp(8),0,0);return t;}private Spinner profileSpinner(String[] names,int selected){ArrayAdapter<String>a=new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,names);Spinner s=new Spinner(this);s.setAdapter(a);s.setSelection(selected);return s;}private LinearLayout box(int color){LinearLayout x=new LinearLayout(this);x.setOrientation(LinearLayout.VERTICAL);x.setBackgroundColor(color);return x;}private TextView text(String s,int z,int c){TextView v=new TextView(this);v.setText(s);v.setTextSize(z);v.setTextColor(c);v.setGravity(Gravity.CENTER_VERTICAL);return v;}private EditText field(String hint){EditText e=new EditText(this);e.setHint(hint);e.setHintTextColor(muted);e.setTextColor(fg);e.setSingleLine(true);return e;}private Spinner colorSpinner(int selected){String[] labels={"Niebieski","Czerwony","Zielony","Zloty"};ArrayAdapter<String>a=new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,labels){@Override public View getView(int p,View v,ViewGroup parent){TextView t=(TextView)super.getView(p,v,parent);t.setTextColor(fg);t.setPadding(dp(12),0,dp(12),0);return t;}@Override public View getDropDownView(int p,View v,ViewGroup parent){TextView t=(TextView)super.getDropDownView(p,v,parent);t.setTextColor(fg);t.setBackgroundColor(card);return t;}};Spinner s=new Spinner(this);s.setAdapter(a);s.setSelection(selected);return s;}private Button button(String s,int color){Button b=new Button(this);b.setText(s);b.setTextColor(Color.WHITE);GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(dp(12));b.setBackground(g);return b;}private Button smallButton(String symbol,String description,int color){Button b=button(symbol,color);b.setTextSize(22);b.setPadding(0,0,0,0);b.setContentDescription(description);return b;}private int colorAt(int i){return new int[]{AppPreferences.BLUE,AppPreferences.RED,AppPreferences.GREEN,AppPreferences.GOLD}[i];}private LinearLayout.LayoutParams rowParams(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(94));p.setMargins(0,dp(5),0,dp(5));return p;}private int dp(int v){return(int)(v*getResources().getDisplayMetrics().density+.5f);}
+    private UiTheme theme;
+
+    @Override
+    public void onCreate(Bundle b) {
+        super.onCreate(b);
+        draw();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        draw();
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        draw();
+    }
+
+    private void draw() {
+        theme = new UiTheme(this);
+        List<PlayerProfile> profiles = ProfileStore.load(this);
+
+        LinearLayout root = box(theme.background);
+        root.setPadding(dp(16), dp(12), dp(16), dp(8));
+
+        // Top App Bar
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+
+        Button back = theme.outlinedButton(this, "← Go back");
+        back.setContentDescription("Go back.");
+        back.setOnClickListener(v -> finish());
+
+        TextView title = text("Players and statistics", 22, theme.onSurface);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setPadding(dp(16), 0, dp(16), 0);
+
+        Button compare = theme.tonalButton(this, "Compare players");
+        compare.setOnClickListener(v -> chooseComparison(profiles));
+
+        Button add = theme.primaryButton(this, "Add player");
+        add.setOnClickListener(v -> addProfile());
+
+        header.addView(back, new LinearLayout.LayoutParams(-2, dp(48)));
+        header.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        header.addView(compare, btnMargin());
+        header.addView(add, btnMargin());
+        root.addView(header, new LinearLayout.LayoutParams(-1, dp(52)));
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setPadding(0, dp(8), 0, dp(8));
+        LinearLayout list = box(theme.background);
+
+        if (profiles.isEmpty()) {
+            LinearLayout emptyBox = box(theme.background);
+            emptyBox.setGravity(Gravity.CENTER);
+            emptyBox.setPadding(dp(24), dp(36), dp(24), dp(36));
+
+            TextView emptyTitle = text("No saved player profiles", 22, theme.onSurface);
+            emptyTitle.setTypeface(Typeface.DEFAULT_BOLD);
+            emptyTitle.setGravity(Gravity.CENTER);
+
+            TextView emptyDesc = text(
+                "Add a player profile to track career statistics and compare players.",
+                16,
+                theme.onSurfaceVariant
+            );
+            emptyDesc.setGravity(Gravity.CENTER);
+            emptyDesc.setPadding(0, dp(8), 0, dp(16));
+
+            Button emptyAdd = theme.primaryButton(this, "Add player");
+            emptyAdd.setOnClickListener(v -> addProfile());
+
+            emptyBox.addView(emptyTitle);
+            emptyBox.addView(emptyDesc);
+            emptyBox.addView(emptyAdd, new LinearLayout.LayoutParams(-2, dp(48)));
+            list.addView(emptyBox, new LinearLayout.LayoutParams(-1, -2));
+        } else {
+            for (PlayerProfile p : profiles) {
+                list.addView(profileRow(p), rowParams());
+            }
+        }
+
+        scroll.addView(list);
+        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        View navBar = theme.createBottomNavBar(this, UiTheme.TAB_PLAYERS, null);
+        root.addView(navBar, new LinearLayout.LayoutParams(-1, dp(56)));
+        setContentView(root);
+    }
+
+    private LinearLayout.LayoutParams btnMargin() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(48));
+        lp.leftMargin = dp(8);
+        return lp;
+    }
+
+    private View profileRow(PlayerProfile p) {
+        PlayerStatistics.Summary s = PlayerStatistics.calculate(this, p);
+        int accent = theme.playerAccentOnSurface(p.color);
+        int rate = s.matches == 0 ? 0 : Math.round(s.wins * 100f / s.matches);
+        String avgPts = s.matches == 0 ? "0.0" : String.format(Locale.US, "%.1f", s.points / (float) s.matches);
+
+        LinearLayout row = box(theme.surfaceLow);
+        row.setPadding(dp(18), dp(12), dp(18), dp(12));
+        row.setMinimumHeight(dp(92));
+        row.setBackground(theme.interactiveBackground(this, theme.surfaceLow, 14, 2, accent));
+
+        String headerText = UiTheme.playerSymbol(p.color) + "  " + p.name + "  (" + UiTheme.playerColorName(p.color) + ")";
+        TextView name = text(headerText, 20, accent);
+        name.setTypeface(Typeface.DEFAULT_BOLD);
+
+        TextView basic = text(
+            "Matches: " + s.matches + "   ·   Wins: " + s.wins + " (" + rate + "%)"
+                + "   ·   Points: " + s.points + "   ·   Avg pts/match: " + avgPts,
+            16,
+            theme.onSurface
+        );
+        UiTheme.applyTabularNumbers(basic);
+
+        TextView special = text(
+            "Points to 6-7 or 7-6: " + s.score67 + "   ·   Points to 6-9 or 9-6: " + s.score69,
+            16,
+            theme.onSurfaceVariant
+        );
+        UiTheme.applyTabularNumbers(special);
+
+        row.addView(name);
+        row.addView(basic);
+        row.addView(special);
+        row.setContentDescription(
+            p.name + ", Color " + UiTheme.playerColorName(p.color)
+                + ". " + s.matches + " matches, " + s.wins + " wins, win rate " + rate + " percent. Double-tap to open player profile."
+        );
+        row.setOnClickListener(v ->
+            startActivity(new Intent(this, PlayerDetailActivity.class).putExtra("profile", p.id))
+        );
+        return row;
+    }
+
+    private void chooseComparison(List<PlayerProfile> profiles) {
+        if (profiles.size() < 2) {
+            new AlertDialog.Builder(this)
+                .setTitle("Cannot compare players")
+                .setMessage("The app cannot compare players yet. A comparison requires at least 2 player profiles. Tap Add player to create another profile.")
+                .setNegativeButton("Cancel action", null)
+                .setPositiveButton("Add player", (d, w) -> addProfile())
+                .show();
+            return;
+        }
+        // UX simplification: if exactly 2 profiles exist, open the comparison immediately in 1 tap!
+        if (profiles.size() == 2) {
+            startActivity(
+                new Intent(this, PlayerComparisonActivity.class)
+                    .putExtra("one", profiles.get(0).id)
+                    .putExtra("two", profiles.get(1).id)
+            );
+            return;
+        }
+        String[] names = new String[profiles.size()];
+        for (int i = 0; i < profiles.size(); i++) names[i] = profiles.get(i).name;
+
+        LinearLayout form = box(theme.surface);
+        form.setPadding(dp(20), dp(12), dp(20), dp(12));
+        Spinner one = theme.styledSpinner(this, names, 0);
+        Spinner two = theme.styledSpinner(this, names, 1);
+
+        form.addView(label("Profile for Player 1"));
+        form.addView(one, new LinearLayout.LayoutParams(-1, dp(48)));
+        form.addView(label("Profile for Player 2"));
+        form.addView(two, new LinearLayout.LayoutParams(-1, dp(48)));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Compare 2 players")
+            .setView(form)
+            .setNegativeButton("Cancel action", null)
+            .setPositiveButton("Show comparison", null)
+            .create();
+
+        dialog.setOnShowListener(ignored -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(new ColorDrawable(theme.surface));
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(theme.primary);
+            Button showBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            showBtn.setTextColor(theme.primary);
+            showBtn.setOnClickListener(v -> {
+                if (one.getSelectedItemPosition() == two.getSelectedItemPosition()) {
+                    new AlertDialog.Builder(this)
+                        .setTitle("Same player selected")
+                        .setMessage("The selected profiles are the same. You must select 2 different player profiles. Select a different profile for Player 2.")
+                        .setPositiveButton("Close dialog", null)
+                        .show();
+                    return;
+                }
+                dialog.dismiss();
+                startActivity(
+                    new Intent(this, PlayerComparisonActivity.class)
+                        .putExtra("one", profiles.get(one.getSelectedItemPosition()).id)
+                        .putExtra("two", profiles.get(two.getSelectedItemPosition()).id)
+                );
+            });
+        });
+        dialog.show();
+    }
+
+    private void addProfile() {
+        LinearLayout form = box(theme.surface);
+        form.setPadding(dp(20), dp(12), dp(20), dp(12));
+        EditText name = theme.editField(this, "", "Player name", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        Spinner color = theme.styledSpinner(this, UiTheme.playerColorNames(), 0);
+
+        form.addView(label("Player name"));
+        form.addView(name, new LinearLayout.LayoutParams(-1, dp(48)));
+        form.addView(label("Player color"));
+        form.addView(color, new LinearLayout.LayoutParams(-1, dp(48)));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Add player")
+            .setView(form)
+            .setNegativeButton("Cancel action", null)
+            .setPositiveButton("Save player", null)
+            .create();
+
+        dialog.setOnShowListener(ignored -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(new ColorDrawable(theme.surface));
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(theme.primary);
+            Button saveBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            saveBtn.setTextColor(theme.primary);
+            saveBtn.setOnClickListener(v -> {
+                String n = name.getText().toString().trim();
+                if (n.isEmpty()) {
+                    new AlertDialog.Builder(this)
+                        .setTitle("Empty player name")
+                        .setMessage("The player name is empty. Each player profile must have a name. Enter a name in the text field.")
+                        .setPositiveButton("Close dialog", null)
+                        .show();
+                    return;
+                }
+                if (ProfileStore.findByName(this, n) != null) {
+                    new AlertDialog.Builder(this)
+                        .setTitle("Duplicate player name")
+                        .setMessage("This player name already exists. Each player profile must have a unique name. Enter a different name.")
+                        .setPositiveButton("Close dialog", null)
+                        .show();
+                    return;
+                }
+                ProfileStore.add(this, new PlayerProfile(n, UiTheme.playerColors()[color.getSelectedItemPosition()]));
+                dialog.dismiss();
+                draw();
+            });
+        });
+        dialog.show();
+    }
+
+    private TextView label(String s) {
+        TextView t = text(s, 16, theme.onSurfaceVariant);
+        t.setPadding(0, dp(8), 0, dp(2));
+        return t;
+    }
+
+    private LinearLayout box(int color) {
+        LinearLayout x = new LinearLayout(this);
+        x.setOrientation(LinearLayout.VERTICAL);
+        x.setBackgroundColor(color);
+        return x;
+    }
+
+    private TextView text(String s, int z, int c) {
+        TextView v = new TextView(this);
+        v.setText(s);
+        v.setTextSize(z);
+        v.setTextColor(c);
+        v.setGravity(Gravity.CENTER_VERTICAL);
+        return v;
+    }
+
+    private LinearLayout.LayoutParams rowParams() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
+        p.setMargins(0, dp(5), 0, dp(5));
+        return p;
+    }
+
+    private int dp(int v) {
+        return (int) (v * getResources().getDisplayMetrics().density + 0.5f);
+    }
 }
