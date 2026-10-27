@@ -21,6 +21,7 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import java.util.Random;
 
 /** Self-contained placeholder lootbox screen; the host app only needs an entry point. */
 public final class LootboxActivity extends Activity {
@@ -31,6 +32,8 @@ public final class LootboxActivity extends Activity {
     private static final int IDLE = 0, SHAKING = 1, CRACKING = 2, POPPING = 3, SPINNING = 4, WON = 5;
 
     private final TierRoller roller = new TierRoller();
+    private final Random visualRandom = new Random();
+    private final LootTier[] reelStrip = new LootTier[50];
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable revealTask = this::showReward;
     private final Runnable splitTask = this::popReel;
@@ -44,6 +47,7 @@ public final class LootboxActivity extends Activity {
     private LootTier lastResult;
     private int phase = IDLE;
     private float shakeProgress, crackProgress, popProgress, reelProgress;
+    private float landingFraction;
     private boolean landscape;
     private boolean rewardDismissed;
 
@@ -142,7 +146,7 @@ public final class LootboxActivity extends Activity {
         ball.setVisibility(phase >= POPPING ? View.INVISIBLE : View.VISIBLE);
         reel.setVisibility(phase >= POPPING ? View.VISIBLE : View.INVISIBLE);
         if (lastResult != null) {
-            reel.prepare(lastResult);
+            reel.prepare(reelStrip, landingFraction);
             reel.setProgress(reelProgress);
         }
         applyPop();
@@ -168,6 +172,9 @@ public final class LootboxActivity extends Activity {
         phase = SHAKING;
         rewardDismissed = false;
         lastResult = roller.roll();
+        for (int i = 0; i < reelStrip.length; i++) reelStrip[i] = roller.roll();
+        reelStrip[ReelView.TARGET] = lastResult;
+        landingFraction = ReelLanding.pickOffsetFraction(visualRandom);
         shakeProgress = crackProgress = popProgress = reelProgress = 0f;
         renderState();
         if (reduceMotion()) {
@@ -195,7 +202,8 @@ public final class LootboxActivity extends Activity {
     private void popReel() {
         phase = POPPING;
         ball.setVisibility(View.INVISIBLE);
-        reel.prepare(lastResult);
+        reel.prepare(reelStrip, landingFraction);
+        applyPop();
         reel.setVisibility(View.VISIBLE);
         animatePhase(650, new OvershootInterpolator(1.3f), value -> {
             popProgress = value;
@@ -264,14 +272,21 @@ public final class LootboxActivity extends Activity {
         continueButton.setAllCaps(false);
         continueButton.setTextColor(BACKGROUND);
         continueButton.setBackgroundColor(ACCENT);
-        continueButton.setOnClickListener(v -> {
-            rewardDismissed = true;
-            rewardOverlay.setVisibility(View.GONE);
-        });
+        continueButton.setOnClickListener(v -> resetToReady());
         LinearLayout.LayoutParams continueParams = new LinearLayout.LayoutParams(-1, dp(44));
         continueParams.topMargin = dp(8);
         rewardCard.addView(continueButton, continueParams);
         rewardOverlay.setContentDescription("You won a " + lastResult.label + " square");
+    }
+
+    private void resetToReady() {
+        rewardCard.animate().cancel();
+        rewardOverlay.setVisibility(View.GONE);
+        lastResult = null;
+        phase = IDLE;
+        shakeProgress = crackProgress = popProgress = reelProgress = 0f;
+        rewardDismissed = true;
+        renderState();
     }
 
     private interface ProgressUpdate { void update(float value); }
@@ -415,13 +430,13 @@ public final class LootboxActivity extends Activity {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final LootTier[] strip = new LootTier[50];
         private float progress;
+        private float landingFraction;
 
         ReelView() { super(LootboxActivity.this); }
 
-        void prepare(LootTier result) {
-            // Filler uses the same odds; the result was fixed before the animation.
-            for (int i = 0; i < strip.length; i++) strip[i] = roller.roll();
-            strip[TARGET] = result;
+        void prepare(LootTier[] items, float offsetFraction) {
+            System.arraycopy(items, 0, strip, 0, strip.length);
+            landingFraction = offsetFraction;
             invalidate();
         }
 
@@ -433,7 +448,7 @@ public final class LootboxActivity extends Activity {
             float size = Math.min(dp(72), getHeight() - dp(28));
             float step = size + dp(12), center = getWidth() / 2f;
             float top = (getHeight() - size) / 2f;
-            float offset = TARGET * step * progress;
+            float offset = (TARGET * step + size * landingFraction) * progress;
             paint.setStyle(Paint.Style.FILL);
             paint.setColor(0xFF262B35);
             canvas.drawRoundRect(0, 0, getWidth(), getHeight(), dp(14), dp(14), paint);
