@@ -15,6 +15,7 @@ import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
+import android.view.animation.LinearInterpolator;
 import android.view.animation.OvershootInterpolator;
 import android.widget.Button;
 import android.widget.FrameLayout;
@@ -32,6 +33,7 @@ public final class LootboxActivity extends Activity {
     private final TierRoller roller = new TierRoller();
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable revealTask = this::showReward;
+    private final Runnable splitTask = this::popReel;
     private ValueAnimator phaseAnimator;
     private FrameLayout rewardOverlay;
     private LinearLayout rewardCard;
@@ -89,27 +91,21 @@ public final class LootboxActivity extends Activity {
             content.addView(subtitle, new LinearLayout.LayoutParams(-1, dp(32)));
         }
 
-        LinearLayout body = new LinearLayout(this);
-        body.setOrientation(landscape ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
-        body.setGravity(Gravity.CENTER);
-        content.addView(body, new LinearLayout.LayoutParams(-1, 0, 1));
-
-        LinearLayout ballSide = column();
-        ballSide.setGravity(Gravity.CENTER_HORIZONTAL);
-        LinearLayout reelSide = column();
-        reelSide.setGravity(Gravity.CENTER_HORIZONTAL);
-        if (landscape) {
-            LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, -1, 1);
-            left.rightMargin = dp(12);
-            body.addView(ballSide, left);
-            body.addView(reelSide, new LinearLayout.LayoutParams(0, -1, 1.3f));
-        } else {
-            body.addView(ballSide, new LinearLayout.LayoutParams(-1, 0, 1));
-            body.addView(reelSide, new LinearLayout.LayoutParams(-1, dp(188)));
-        }
-
+        FrameLayout stage = new FrameLayout(this);
+        content.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1));
         ball = new BallView();
-        ballSide.addView(ball, new LinearLayout.LayoutParams(-1, 0, 1));
+        stage.addView(ball, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
+        reel = new ReelView();
+        FrameLayout.LayoutParams reelParams = new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER);
+        reelParams.leftMargin = dp(landscape ? 28 : 8);
+        reelParams.rightMargin = dp(landscape ? 28 : 8);
+        stage.addView(reel, reelParams);
+
+        resultLabel = label("", landscape ? 17 : 20, FOREGROUND);
+        resultLabel.setGravity(Gravity.CENTER);
+        resultLabel.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        content.addView(resultLabel, new LinearLayout.LayoutParams(-1, dp(landscape ? 34 : 44)));
+
         openButton = new Button(this);
         openButton.setText("Open lootbox");
         openButton.setAllCaps(false);
@@ -118,22 +114,11 @@ public final class LootboxActivity extends Activity {
         openButton.setTextColor(BACKGROUND);
         openButton.setBackgroundColor(ACCENT);
         openButton.setOnClickListener(v -> open());
-        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(-1, dp(48));
-        buttonParams.setMargins(dp(8), dp(4), dp(8), dp(4));
-        ballSide.addView(openButton, buttonParams);
-
-        reel = new ReelView();
-        reelSide.addView(reel, new LinearLayout.LayoutParams(-1, 0, 1));
-        resultLabel = label("", landscape ? 17 : 20, FOREGROUND);
-        resultLabel.setGravity(Gravity.CENTER);
-        resultLabel.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        reelSide.addView(resultLabel, new LinearLayout.LayoutParams(-1, dp(44)));
-
-        TextView odds = label("Gray 70%   ·   Green 25%   ·   Purple 4%   ·   Gold 1%",
-            landscape ? 12 : 14, MUTED);
-        odds.setGravity(Gravity.CENTER);
-        odds.setSingleLine(true);
-        content.addView(odds, new LinearLayout.LayoutParams(-1, dp(landscape ? 26 : 40)));
+        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
+            dp(landscape ? 250 : 220), dp(48));
+        buttonParams.gravity = Gravity.CENTER_HORIZONTAL;
+        buttonParams.bottomMargin = dp(landscape ? 4 : 10);
+        content.addView(openButton, buttonParams);
 
         rewardOverlay = new FrameLayout(this);
         rewardOverlay.setBackgroundColor(0xE912151B);
@@ -178,6 +163,7 @@ public final class LootboxActivity extends Activity {
     private void open() {
         if (phase != IDLE && phase != WON) return;
         handler.removeCallbacks(revealTask);
+        handler.removeCallbacks(splitTask);
         if (phaseAnimator != null) phaseAnimator.cancel();
         phase = SHAKING;
         rewardDismissed = false;
@@ -203,7 +189,7 @@ public final class LootboxActivity extends Activity {
         animatePhase(1200, new DecelerateInterpolator(1.1f), value -> {
             crackProgress = value;
             ball.setCrack(value);
-        }, this::popReel);
+        }, () -> handler.postDelayed(splitTask, 350));
     }
 
     private void popReel() {
@@ -223,22 +209,16 @@ public final class LootboxActivity extends Activity {
         reel.setScaleX(scale);
         reel.setScaleY(scale);
         reel.setAlpha(Math.min(1f, Math.max(0f, popProgress * 1.8f)));
-        if (landscape) {
-            reel.setTranslationX(-dp(120) * (1f - popProgress));
-            reel.setTranslationY(0);
-        } else {
-            reel.setTranslationY(-dp(100) * (1f - popProgress));
-            reel.setTranslationX(0);
-        }
+        reel.setTranslationY(dp(24) * (1f - popProgress));
     }
 
     private void spinReel() {
         phase = SPINNING;
         popProgress = 1f;
         applyPop();
-        animatePhase(7000, new DecelerateInterpolator(1.7f), value -> {
-            reelProgress = value;
-            reel.setProgress(value);
+        animatePhase(6500, new LinearInterpolator(), value -> {
+            reelProgress = ReelTiming.progressAt(Math.round(value * 6500));
+            reel.setProgress(reelProgress);
         }, () -> handler.postDelayed(revealTask, 500));
     }
 
@@ -315,6 +295,7 @@ public final class LootboxActivity extends Activity {
 
     @Override protected void onDestroy() {
         handler.removeCallbacks(revealTask);
+        handler.removeCallbacks(splitTask);
         if (phaseAnimator != null) phaseAnimator.cancel();
         if (rewardCard != null) rewardCard.animate().cancel();
         super.onDestroy();
@@ -361,35 +342,55 @@ public final class LootboxActivity extends Activity {
         @Override protected void onDraw(Canvas canvas) {
             float cx = getWidth() / 2f, cy = getHeight() / 2f;
             float radius = Math.min(getWidth(), getHeight()) * .39f;
-            float split = Math.max(0, (crack - .65f) / .35f) * radius * .32f;
+            float split = Math.max(0, (crack - .6f) / .4f) * radius * .38f;
+            Path leftHalf = new Path();
+            leftHalf.moveTo(0, 0);
+            leftHalf.lineTo(cx, 0);
+            addSeam(leftHalf, cx, cy, radius);
+            leftHalf.lineTo(cx, getHeight());
+            leftHalf.lineTo(0, getHeight());
+            leftHalf.close();
+            Path rightHalf = new Path();
+            rightHalf.moveTo(getWidth(), 0);
+            rightHalf.lineTo(cx, 0);
+            addSeam(rightHalf, cx, cy, radius);
+            rightHalf.lineTo(cx, getHeight());
+            rightHalf.lineTo(getWidth(), getHeight());
+            rightHalf.close();
+
             canvas.save();
-            canvas.clipRect(0, 0, cx, getHeight());
             canvas.translate(-split, -split * .12f);
+            canvas.clipPath(leftHalf);
             drawBall(canvas, cx, cy, radius);
             canvas.restore();
             canvas.save();
-            canvas.clipRect(cx, 0, getWidth(), getHeight());
             canvas.translate(split, split * .12f);
+            canvas.clipPath(rightHalf);
             drawBall(canvas, cx, cy, radius);
             canvas.restore();
 
-            if (crack > 0f && crack < .98f) {
+            if (crack > 0f && crack < .6f) {
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setStrokeWidth(dp(3));
                 paint.setColor(0xFFFFE4B2);
                 Path path = new Path();
-                path.moveTo(cx - radius * .12f, cy - radius * .9f);
-                path.lineTo(cx + radius * .15f, cy - radius * .45f);
-                path.lineTo(cx - radius * .18f, cy - radius * .12f);
-                path.lineTo(cx + radius * .2f, cy + radius * .18f);
-                path.lineTo(cx - radius * .1f, cy + radius * .53f);
-                path.lineTo(cx + radius * .12f, cy + radius * .9f);
+                path.moveTo(cx, 0);
+                addSeam(path, cx, cy, radius);
                 canvas.save();
                 canvas.clipRect(cx - radius, cy - radius, cx + radius,
-                    cy - radius + 2 * radius * crack);
+                    cy - radius + 2 * radius * (crack / .6f));
                 canvas.drawPath(path, paint);
                 canvas.restore();
             }
+        }
+
+        private void addSeam(Path path, float cx, float cy, float radius) {
+            path.lineTo(cx, cy - radius);
+            path.lineTo(cx - radius * .12f, cy - radius * .6f);
+            path.lineTo(cx + radius * .09f, cy - radius * .25f);
+            path.lineTo(cx - radius * .1f, cy + radius * .12f);
+            path.lineTo(cx + radius * .12f, cy + radius * .48f);
+            path.lineTo(cx, cy + radius);
         }
 
         private void drawBall(Canvas canvas, float cx, float cy, float radius) {
