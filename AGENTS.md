@@ -151,6 +151,13 @@ These behaviors keep the score correct. Do not change them without an explicit r
 6. A version bump changes `Android/app/build.gradle`:
    `versionCode` increases by 1. `versionName` increases by `0.1` (example: `1.3` → `1.4`).
 7. The ZeppOS apps have separate versions in their `app.json`. Change them only for watch changes.
+8. Run the final release procedure only when you are sure that no new code for the feature will be added:
+   1. Update `versionCode` and `versionName` in `Android/app/build.gradle`.
+   2. Build and test the APK: `gradle -p Android -Dorg.gradle.java.home=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home testDebugUnitTest assembleDebug`.
+   3. Commit the changes (without `*.apk`) and merge them into `master`.
+   4. Tag the release commit: `git tag -a 0.1.3 -m "Release 0.1.3"`.
+   5. Push `master` and the tag to `origin`.
+   6. Publish the GitHub Release with title `0.1.3` (for example, `0.1.3`) and attach `Android/app/build/outputs/apk/debug/app-debug.apk` as the release asset.
 
 See the skill [.agents/skills/release-version-bump](.agents/skills/release-version-bump/SKILL.md).
 
