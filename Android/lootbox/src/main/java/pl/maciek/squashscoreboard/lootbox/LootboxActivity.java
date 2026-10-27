@@ -479,25 +479,79 @@ public final class LootboxActivity extends Activity {
                 if (x + size / 2 < 0 || x - size / 2 > getWidth()) continue;
                 RewardCatalog.Reward square = strip[Math.floorMod(i, strip.length)];
                 if (square == null) continue;
-                paint.setColor(square.key());
-                if (square.colors.length > 1) {
-                    int[] colors = square.colors;
-                    if (square.animated) {
-                        colors = colors.clone();
-                        int shift = (int) ((System.currentTimeMillis() / 450) % 6);
-                        for (int j = 0; j < colors.length; j++) colors[j] = square.colors[(j + shift) % 6];
-                        postInvalidateDelayed(80);
-                    }
-                    paint.setShader(new LinearGradient(x - size / 2, top, x + size / 2,
-                        top + size, colors, null, Shader.TileMode.CLAMP));
-                }
-                canvas.drawRoundRect(x - size / 2, top, x + size / 2,
-                    top + size, dp(8), dp(8), paint);
-                paint.setShader(null);
+                drawTierTile(canvas, x - size / 2, top, size, square);
             }
             paint.setColor(ACCENT);
             canvas.drawRect(center - dp(2), 0, center + dp(2), Math.max(dp(10), top - dp(3)), paint);
             canvas.drawRect(center - dp(2), top + size + dp(3), center + dp(2), getHeight(), paint);
+            canvas.restoreToCount(save);
+        }
+
+        private void drawTierTile(Canvas canvas, float left, float top,
+                                  float size, RewardCatalog.Reward reward) {
+            int save = canvas.save();
+            canvas.translate(left, top);
+            canvas.scale(size / 72f, size / 72f);
+
+            // The square always shows rarity; only the poured paint shows the prize color.
+            paint.setShader(null);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(reward.tier.color);
+            canvas.drawRoundRect(0, 0, 72, 72, 9, 9, paint);
+            paint.setColor(0xAA151923);
+            paint.setTextAlign(Paint.Align.CENTER);
+            paint.setTypeface(android.graphics.Typeface.create("sans-serif-condensed",
+                android.graphics.Typeface.BOLD));
+            paint.setTextSize(10);
+            canvas.drawText(reward.tier.label.toUpperCase(), 36, 12, paint);
+
+            Path flow = new Path();
+            flow.moveTo(40, 35);
+            flow.cubicTo(47, 37, 43, 45, 51, 48);
+            flow.cubicTo(54, 50, 58, 49, 60, 54);
+            flow.cubicTo(63, 62, 53, 64, 43, 61);
+            flow.cubicTo(34, 59, 32, 55, 39, 50);
+            flow.cubicTo(44, 46, 38, 42, 40, 35);
+            flow.close();
+            if (reward.colors.length > 1) {
+                int[] colors = reward.colors;
+                if (reward.animated) {
+                    colors = colors.clone();
+                    int shift = (int) ((System.currentTimeMillis() / 450) % 6);
+                    for (int j = 0; j < colors.length; j++)
+                        colors[j] = reward.colors[(j + shift) % 6];
+                    postInvalidateDelayed(80);
+                }
+                paint.setShader(new LinearGradient(35, 35, 61, 61,
+                    colors, null, Shader.TileMode.CLAMP));
+            } else {
+                paint.setColor(reward.key());
+            }
+            canvas.drawPath(flow, paint);
+            paint.setShader(null);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(1.7f);
+            paint.setColor(0xCC17202B);
+            canvas.drawPath(flow, paint);
+
+            int canSave = canvas.save();
+            canvas.rotate(-25, 28, 31);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(0xFF202A34);
+            canvas.drawRoundRect(14, 21, 42, 44, 4, 4, paint);
+            paint.setColor(0xFFF7F3EA);
+            canvas.drawRoundRect(16, 22, 40, 42, 3, 3, paint);
+            paint.setColor(reward.colors.length > 1 ? reward.colors[1] : reward.key());
+            canvas.drawRect(17, 34, 39, 41, paint);
+            paint.setColor(0xFF202A34);
+            canvas.drawOval(13, 17, 43, 25, paint);
+            paint.setColor(0xFFF7F3EA);
+            canvas.drawOval(16, 18, 40, 23, paint);
+            canvas.restoreToCount(canSave);
+
+            paint.setTypeface(null);
+            paint.setTextAlign(Paint.Align.LEFT);
+            paint.setStyle(Paint.Style.FILL);
             canvas.restoreToCount(save);
         }
     }
