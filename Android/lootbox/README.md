@@ -6,4 +6,6 @@ This Android library contains the placeholder lootbox screen and its drop logic.
 
 The ball shakes for one second, cracks into two jagged halves over 1.2 seconds, and the reel appears in the same centered stage. The reel travels quickly for 1.5 seconds, slows for 3 seconds, then moves very slowly for the final 2 seconds. A smooth speed curve joins those sections and ends at zero speed. The stop point varies inside the winning square, with a margin from its edges. A centered reward card celebrates the result; Continue returns to a fresh ball. The landscape layout fits without scrolling. With Android's animation scale set to zero, the result appears immediately. This is a local visual prototype: no inventory, persistence, payments, or server-side rewards are included.
 
+The reel starts with a randomized set of squares already visible on both sides of the marker. Filler squares repeat as a visual loop, while the chosen prize remains fixed at the stopping point. The host app opens the prototype from the Players and statistics screen; the four-item bottom navigation stays unchanged.
+
 Run `:lootbox:testDebugUnitTest` for roll tests and `:app:assembleDebug` for the integrated app.

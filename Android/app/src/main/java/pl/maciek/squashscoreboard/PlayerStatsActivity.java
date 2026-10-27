@@ -18,6 +18,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import java.util.List;
 import java.util.Locale;
+import pl.maciek.squashscoreboard.lootbox.LootboxActivity;
 
 public class PlayerStatsActivity extends Activity {
     private UiTheme theme;
@@ -110,6 +111,13 @@ public class PlayerStatsActivity extends Activity {
                 list.addView(profileRow(p), rowParams());
             }
         }
+
+        Button lootbox = theme.outlinedButton(this, "Open lootbox prototype");
+        lootbox.setContentDescription("Open the lootbox prototype from player profiles");
+        lootbox.setOnClickListener(v -> startActivity(new Intent(this, LootboxActivity.class)));
+        LinearLayout.LayoutParams lootboxParams = new LinearLayout.LayoutParams(-1, dp(48));
+        lootboxParams.topMargin = dp(16);
+        list.addView(lootbox, lootboxParams);
 
         scroll.addView(list);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
