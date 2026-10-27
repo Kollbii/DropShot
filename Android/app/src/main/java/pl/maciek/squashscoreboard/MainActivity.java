@@ -43,6 +43,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import pl.maciek.squashscoreboard.lootbox.RewardCatalog;
 
 public class MainActivity extends Activity {
     private UiTheme theme;
@@ -276,6 +277,9 @@ public class MainActivity extends Activity {
         bg.setCornerRadius(dp(16));
         bg.setStroke(dp(3), panelAccent);
         panel.setBackground(bg);
+        RewardCatalog.Reward cosmetic = RewardCatalog.byKey(rawColor);
+        if (cosmetic != null && cosmetic.colors.length > 1)
+            RewardCatalog.configure(panel, bg, cosmetic, true);
         panel.setOnClickListener(v -> addPoint(player));
         panel.setOnLongClickListener(v -> {
             showSettings();
@@ -1105,8 +1109,8 @@ public class MainActivity extends Activity {
         remoteReset = AppPreferences.remote(this, "reset", KeyEvent.KEYCODE_MEDIA_PLAY);
     }
 
-    private int[] colors() { return UiTheme.playerColors(); }
-    private String[] colorNames() { return UiTheme.playerColorNames(); }
+    private int[] colors() { return UiTheme.playerColors(this); }
+    private String[] colorNames() { return UiTheme.playerColorNames(this); }
     private int colorAt(int i) { return colors()[i]; }
     private int colorIndex(int c) {
         int[] x = colors();

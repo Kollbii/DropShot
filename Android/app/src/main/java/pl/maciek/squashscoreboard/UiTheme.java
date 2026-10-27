@@ -25,6 +25,8 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
+import pl.maciek.squashscoreboard.lootbox.RewardCatalog;
+import pl.maciek.squashscoreboard.lootbox.RewardInventory;
 
 /**
  * Shared Material Design 3 tokens, WCAG 2.2 AA contrast colors, 8 dp spacing helpers,
@@ -115,24 +117,31 @@ public final class UiTheme {
         }
     }
 
-    /** Player colors that always remain stored as AppPreferences constants for backward compatibility. */
-    public static int[] playerColors() {
-        return new int[]{AppPreferences.BLUE, AppPreferences.RED, AppPreferences.GREEN, AppPreferences.GOLD};
+    /** Player color keys are supplied by the shared reward catalog. */
+    public static int[] playerColors(Context context) {
+        RewardCatalog.Reward[] rewards = RewardInventory.available(context);
+        int[] colors = new int[rewards.length];
+        for (int i = 0; i < rewards.length; i++) colors[i] = rewards[i].key();
+        return colors;
     }
 
-    public static String[] playerColorNames() {
-        return new String[]{"Blue", "Red", "Green", "Gold"};
+    public static String[] playerColorNames(Context context) {
+        RewardCatalog.Reward[] rewards = RewardInventory.available(context);
+        String[] names = new String[rewards.length];
+        for (int i = 0; i < rewards.length; i++)
+            names[i] = rewards[i].name + " · " + rewards[i].tier.label;
+        return names;
     }
 
     public static String playerColorName(int rawColor) {
-        if (rawColor == AppPreferences.RED) return "Red";
-        if (rawColor == AppPreferences.GREEN) return "Green";
-        if (rawColor == AppPreferences.GOLD) return "Gold";
-        return "Blue";
+        RewardCatalog.Reward reward = RewardCatalog.byKey(rawColor);
+        return reward == null ? "Custom" : reward.name;
     }
 
     /** Non-color symbol per player color so color is never the only signal. */
     public static String playerSymbol(int rawColor) {
+        RewardCatalog.Reward reward = RewardCatalog.byKey(rawColor);
+        if (reward != null && reward.colors.length > 1) return "✦";
         if (rawColor == AppPreferences.RED) return "◆";
         if (rawColor == AppPreferences.GREEN) return "▲";
         if (rawColor == AppPreferences.GOLD) return "★";
@@ -141,6 +150,9 @@ public final class UiTheme {
 
     /** High-contrast panel fill (T40 / T30) for score panels where white text has >= 6.45:1 contrast. */
     public int playerPanelFill(int rawColor) {
+        if (RewardCatalog.byKey(rawColor) != null && rawColor != AppPreferences.BLUE
+            && rawColor != AppPreferences.RED && rawColor != AppPreferences.GREEN
+            && rawColor != AppPreferences.GOLD) return darken(rawColor);
         if (rawColor == AppPreferences.RED) return highContrast ? 0xFF92001D : 0xFFBB152C;
         if (rawColor == AppPreferences.GREEN) return highContrast ? 0xFF005233 : 0xFF006C45;
         if (rawColor == AppPreferences.GOLD) return highContrast ? 0xFF5C4200 : 0xFF7A5900;
@@ -149,6 +161,9 @@ public final class UiTheme {
 
     /** High-contrast text/line accent on surface (T80 in dark, T40 in light) with >= 6.14:1 contrast. */
     public int playerAccentOnSurface(int rawColor) {
+        if (RewardCatalog.byKey(rawColor) != null && rawColor != AppPreferences.BLUE
+            && rawColor != AppPreferences.RED && rawColor != AppPreferences.GREEN
+            && rawColor != AppPreferences.GOLD) return rawColor;
         if (dark) {
             if (rawColor == AppPreferences.RED) return 0xFFFFB3AD;
             if (rawColor == AppPreferences.GREEN) return 0xFF58DE9E;
@@ -156,6 +171,11 @@ public final class UiTheme {
             return 0xFFB7C4FF;
         }
         return playerPanelFill(rawColor);
+    }
+
+    private static int darken(int color) {
+        return Color.rgb(Math.round(Color.red(color) * .58f),
+            Math.round(Color.green(color) * .58f), Math.round(Color.blue(color) * .58f));
     }
 
     public static boolean isReduceMotionEnabled(Context context) {

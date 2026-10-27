@@ -246,7 +246,7 @@ public class PlayerStatsActivity extends Activity {
         LinearLayout form = box(theme.surface);
         form.setPadding(dp(20), dp(12), dp(20), dp(12));
         EditText name = theme.editField(this, "", "Player name", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        Spinner color = theme.styledSpinner(this, UiTheme.playerColorNames(), 0);
+        Spinner color = theme.styledSpinner(this, UiTheme.playerColorNames(this), 0);
 
         form.addView(label("Player name"));
         form.addView(name, new LinearLayout.LayoutParams(-1, dp(48)));
@@ -285,7 +285,7 @@ public class PlayerStatsActivity extends Activity {
                         .show();
                     return;
                 }
-                ProfileStore.add(this, new PlayerProfile(n, UiTheme.playerColors()[color.getSelectedItemPosition()]));
+                ProfileStore.add(this, new PlayerProfile(n, UiTheme.playerColors(this)[color.getSelectedItemPosition()]));
                 dialog.dismiss();
                 draw();
             });

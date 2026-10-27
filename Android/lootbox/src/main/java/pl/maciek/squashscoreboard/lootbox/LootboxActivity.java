@@ -8,6 +8,8 @@ import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.LinearGradient;
+import android.graphics.Shader;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -33,7 +35,7 @@ public final class LootboxActivity extends Activity {
 
     private final TierRoller roller = new TierRoller();
     private final Random visualRandom = new Random();
-    private final LootTier[] reelStrip = new LootTier[50];
+    private final RewardCatalog.Reward[] reelStrip = new RewardCatalog.Reward[50];
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable revealTask = this::showReward;
     private final Runnable splitTask = this::popReel;
@@ -45,12 +47,14 @@ public final class LootboxActivity extends Activity {
     private Button openButton;
     private TextView resultLabel;
     private LootTier lastResult;
+    private RewardCatalog.Reward lastReward;
     private int phase = IDLE;
     private float shakeProgress, crackProgress, popProgress, reelProgress;
     private float landingFraction;
     private int reelStartIndex;
     private boolean landscape;
     private boolean rewardDismissed;
+    private boolean rewardAlreadyOwned;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -155,7 +159,7 @@ public final class LootboxActivity extends Activity {
         openButton.setAlpha(openButton.isEnabled() ? 1f : .55f);
         openButton.setText(phase == WON ? "Open another lootbox" : "Open lootbox");
         if (phase == WON && lastResult != null) {
-            resultLabel.setText("You got: " + lastResult.label + " square");
+            resultLabel.setText("You got: " + lastReward.name + " · " + lastResult.label);
             resultLabel.setTextColor(lastResult.color);
             buildRewardCard();
             rewardOverlay.setVisibility(rewardDismissed ? View.GONE : View.VISIBLE);
@@ -173,8 +177,11 @@ public final class LootboxActivity extends Activity {
         phase = SHAKING;
         rewardDismissed = false;
         lastResult = roller.roll();
-        for (int i = 0; i < reelStrip.length; i++) reelStrip[i] = roller.roll();
-        reelStrip[ReelView.TARGET] = lastResult;
+        lastReward = RewardCatalog.pick(lastResult, visualRandom);
+        rewardAlreadyOwned = RewardInventory.owns(this, lastReward);
+        for (int i = 0; i < reelStrip.length; i++)
+            reelStrip[i] = RewardCatalog.pick(roller.roll(), visualRandom);
+        reelStrip[ReelView.TARGET] = lastReward;
         landingFraction = ReelLanding.pickOffsetFraction(visualRandom);
         reelStartIndex = 10 + visualRandom.nextInt(6);
         shakeProgress = crackProgress = popProgress = reelProgress = 0f;
@@ -182,6 +189,7 @@ public final class LootboxActivity extends Activity {
         if (reduceMotion()) {
             crackProgress = popProgress = reelProgress = 1f;
             phase = WON;
+            RewardInventory.unlock(this, lastReward);
             renderState();
             return;
         }
@@ -236,8 +244,9 @@ public final class LootboxActivity extends Activity {
         if (phase != SPINNING) return;
         phase = WON;
         rewardDismissed = false;
+        RewardInventory.unlock(this, lastReward);
         reelProgress = 1f;
-        resultLabel.setText("You got: " + lastResult.label + " square");
+        resultLabel.setText("You got: " + lastReward.name + " · " + lastResult.label);
         resultLabel.setTextColor(lastResult.color);
         openButton.setText("Open another lootbox");
         openButton.setEnabled(true);
@@ -260,15 +269,20 @@ public final class LootboxActivity extends Activity {
         heading.setGravity(Gravity.CENTER);
         rewardCard.addView(heading, new LinearLayout.LayoutParams(-1, dp(36)));
         View square = new View(this);
-        square.setBackgroundColor(lastResult.color);
+        RewardCatalog.paint(square, lastReward, dp(10));
         LinearLayout.LayoutParams squareParams = new LinearLayout.LayoutParams(dp(landscape ? 82 : 108), dp(landscape ? 82 : 108));
         squareParams.topMargin = dp(10);
         squareParams.bottomMargin = dp(10);
         rewardCard.addView(square, squareParams);
-        TextView name = label(lastResult.label.toUpperCase() + " SQUARE", landscape ? 20 : 24, lastResult.color);
+        TextView name = label(lastReward.name.toUpperCase() + " · " + lastResult.label.toUpperCase(),
+            landscape ? 18 : 21, lastResult.color);
         name.setTypeface(null, 1);
         name.setGravity(Gravity.CENTER);
         rewardCard.addView(name, new LinearLayout.LayoutParams(-1, dp(38)));
+        TextView status = label(rewardAlreadyOwned ? "Already in your collection" : "New player color unlocked",
+            14, MUTED);
+        status.setGravity(Gravity.CENTER);
+        rewardCard.addView(status, new LinearLayout.LayoutParams(-1, dp(26)));
         Button continueButton = new Button(this);
         continueButton.setText("Continue");
         continueButton.setAllCaps(false);
@@ -278,13 +292,14 @@ public final class LootboxActivity extends Activity {
         LinearLayout.LayoutParams continueParams = new LinearLayout.LayoutParams(-1, dp(44));
         continueParams.topMargin = dp(8);
         rewardCard.addView(continueButton, continueParams);
-        rewardOverlay.setContentDescription("You won a " + lastResult.label + " square");
+        rewardOverlay.setContentDescription("You won " + lastReward.name + ", " + lastResult.label + " tier");
     }
 
     private void resetToReady() {
         rewardCard.animate().cancel();
         rewardOverlay.setVisibility(View.GONE);
         lastResult = null;
+        lastReward = null;
         phase = IDLE;
         shakeProgress = crackProgress = popProgress = reelProgress = 0f;
         rewardDismissed = true;
@@ -430,14 +445,14 @@ public final class LootboxActivity extends Activity {
     private final class ReelView extends View {
         private static final int TARGET = 42;
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final LootTier[] strip = new LootTier[50];
+        private final RewardCatalog.Reward[] strip = new RewardCatalog.Reward[50];
         private float progress;
         private float landingFraction;
         private int startIndex;
 
         ReelView() { super(LootboxActivity.this); }
 
-        void prepare(LootTier[] items, float offsetFraction, int firstIndex) {
+        void prepare(RewardCatalog.Reward[] items, float offsetFraction, int firstIndex) {
             System.arraycopy(items, 0, strip, 0, strip.length);
             landingFraction = offsetFraction;
             startIndex = firstIndex;
@@ -462,11 +477,23 @@ public final class LootboxActivity extends Activity {
             for (int i = underMarker - visibleEachSide; i <= underMarker + visibleEachSide; i++) {
                 float x = center + i * step - offset;
                 if (x + size / 2 < 0 || x - size / 2 > getWidth()) continue;
-                LootTier square = strip[Math.floorMod(i, strip.length)];
+                RewardCatalog.Reward square = strip[Math.floorMod(i, strip.length)];
                 if (square == null) continue;
-                paint.setColor(square.color);
+                paint.setColor(square.key());
+                if (square.colors.length > 1) {
+                    int[] colors = square.colors;
+                    if (square.animated) {
+                        colors = colors.clone();
+                        int shift = (int) ((System.currentTimeMillis() / 450) % 6);
+                        for (int j = 0; j < colors.length; j++) colors[j] = square.colors[(j + shift) % 6];
+                        postInvalidateDelayed(80);
+                    }
+                    paint.setShader(new LinearGradient(x - size / 2, top, x + size / 2,
+                        top + size, colors, null, Shader.TileMode.CLAMP));
+                }
                 canvas.drawRoundRect(x - size / 2, top, x + size / 2,
                     top + size, dp(8), dp(8), paint);
+                paint.setShader(null);
             }
             paint.setColor(ACCENT);
             canvas.drawRect(center - dp(2), 0, center + dp(2), Math.max(dp(10), top - dp(3)), paint);

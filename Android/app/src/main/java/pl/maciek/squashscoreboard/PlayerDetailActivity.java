@@ -124,7 +124,7 @@ public class PlayerDetailActivity extends Activity {
         form.setPadding(dp(20), dp(12), dp(20), dp(12));
 
         EditText name = theme.editField(this, profile.name, "Player name", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        Spinner color = theme.styledSpinner(this, UiTheme.playerColorNames(), colorIndex(profile.color));
+        Spinner color = theme.styledSpinner(this, UiTheme.playerColorNames(this), colorIndex(profile.color));
 
         TextView nameLabel = t("Player name", 16, theme.onSurfaceVariant);
         TextView colorLabel = t("Player color", 16, theme.onSurfaceVariant);
@@ -178,11 +178,11 @@ public class PlayerDetailActivity extends Activity {
     }
 
     private int colorAt(int i) {
-        return UiTheme.playerColors()[i];
+        return UiTheme.playerColors(this)[i];
     }
 
     private int colorIndex(int c) {
-        int[] all = UiTheme.playerColors();
+        int[] all = UiTheme.playerColors(this);
         for (int i = 0; i < all.length; i++) if (all[i] == c) return i;
         return 0;
     }
