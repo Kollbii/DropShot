@@ -147,9 +147,10 @@ These behaviors keep the score correct. Do not change them without an explicit r
 2. Commit only when the user asks. Use 1 commit for 1 batch unless the user asks for more.
 3. Write the commit subject in the imperative form, 72 characters or fewer.
 4. Do not push, force-push, rebase, or delete branches without a request.
-5. A version bump changes `Android/app/build.gradle`:
+5. When you create a release tag, you must use the format: `git tag -a 0.1.3 -m "Release 0.1.3"`.
+6. A version bump changes `Android/app/build.gradle`:
    `versionCode` increases by 1. `versionName` increases by `0.1` (example: `1.3` → `1.4`).
-6. The ZeppOS apps have separate versions in their `app.json`. Change them only for watch changes.
+7. The ZeppOS apps have separate versions in their `app.json`. Change them only for watch changes.
 
 See the skill [.agents/skills/release-version-bump](.agents/skills/release-version-bump/SKILL.md).
 
