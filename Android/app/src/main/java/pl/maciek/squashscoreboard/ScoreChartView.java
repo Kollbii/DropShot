@@ -15,6 +15,8 @@ import java.util.Locale;
 public final class ScoreChartView extends View {
     private final MatchRecord record;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path firstPath = new Path();
+    private final Path secondPath = new Path();
     private final DashPathEffect dashEffect;
     private final UiTheme theme;
     private final ScaleGestureDetector scaleDetector;
@@ -96,9 +98,10 @@ public final class ScoreChartView extends View {
         int c1 = theme.playerAccentOnSurface(record.playerOneColor);
         int c2 = theme.playerAccentOnSurface(record.playerTwoColor);
 
-        Path first = new Path(), second = new Path();
-        first.moveTo(left, y(startOne, yMin, yMax, top, bottom));
-        second.moveTo(left, y(startTwo, yMin, yMax, top, bottom));
+        firstPath.reset();
+        secondPath.reset();
+        firstPath.moveTo(left, y(startOne, yMin, yMax, top, bottom));
+        secondPath.moveTo(left, y(startTwo, yMin, yMax, top, bottom));
         one = startOne;
         two = startTwo;
         for (int i = 0; i < winners.size(); i++) {
@@ -108,8 +111,8 @@ public final class ScoreChartView extends View {
             float x = x(time, left, right, windowStart, window);
             float y1 = y(one, yMin, yMax, top, bottom);
             float y2 = y(two, yMin, yMax, top, bottom);
-            first.lineTo(x, y1);
-            second.lineTo(x, y2);
+            firstPath.lineTo(x, y1);
+            secondPath.lineTo(x, y2);
             if (zoom > 1.5 || winners.size() < 40) {
                 paint.setStyle(Paint.Style.FILL);
                 paint.setPathEffect(null);
@@ -127,11 +130,11 @@ public final class ScoreChartView extends View {
         paint.setStrokeWidth(dp(3));
         paint.setPathEffect(null);
         paint.setColor(c1);
-        c.drawPath(first, paint);
+        c.drawPath(firstPath, paint);
 
         paint.setPathEffect(dashEffect);
         paint.setColor(c2);
-        c.drawPath(second, paint);
+        c.drawPath(secondPath, paint);
         paint.setPathEffect(null);
 
         paint.setStyle(Paint.Style.FILL);

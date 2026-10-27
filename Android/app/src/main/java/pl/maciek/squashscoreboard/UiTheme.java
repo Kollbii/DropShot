@@ -239,6 +239,8 @@ public final class UiTheme {
         button.setMinimumHeight(dp(context, 48));
         button.setPadding(dp(context, 16), 0, dp(context, 16), 0);
         button.setBackground(interactiveBackground(context, primary, 24, 0, 0));
+        // [MASVS-PLATFORM] Reject touches when an untrusted overlay obscures the view (anti-tapjacking)
+        button.setFilterTouchesWhenObscured(true);
         return button;
     }
 
@@ -253,6 +255,7 @@ public final class UiTheme {
         button.setMinimumHeight(dp(context, 48));
         button.setPadding(dp(context, 16), 0, dp(context, 16), 0);
         button.setBackground(interactiveBackground(context, secondaryContainer, 24, 0, 0));
+        button.setFilterTouchesWhenObscured(true);
         return button;
     }
 
@@ -266,6 +269,7 @@ public final class UiTheme {
         button.setMinimumHeight(dp(context, 48));
         button.setPadding(dp(context, 14), 0, dp(context, 14), 0);
         button.setBackground(interactiveBackground(context, surfaceLow, 24, 1, outline));
+        button.setFilterTouchesWhenObscured(true);
         return button;
     }
 
@@ -280,6 +284,7 @@ public final class UiTheme {
         button.setMinimumHeight(dp(context, 48));
         button.setPadding(dp(context, 14), 0, dp(context, 14), 0);
         button.setBackground(interactiveBackground(context, errorContainer, 24, 1, error));
+        button.setFilterTouchesWhenObscured(true);
         return button;
     }
 

@@ -2,20 +2,53 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- [MASVS-STORAGE] [MASVS-NETWORK] [MASVS-PLATFORM]
+         Disable OS cloud/ADB backup extraction, enforce network_security_config,
+         and explicitly set android:exported="false" on all internal activities. -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:usesCleartextTraffic="false"
         android:icon="@drawable/squash_logo"
         android:label="DropShot"
         android:roundIcon="@drawable/squash_logo"
+        android:supportsRtl="true"
         android:theme="@style/Theme.SquashScoreboard">
-        <activity android:name="pl.maciek.squashscoreboard.lootbox.LootboxActivity" android:configChanges="orientation|screenSize" />
-        <activity android:name=".PlayerStatsActivity" android:configChanges="orientation|screenSize" />
-        <activity android:name=".PlayerDetailActivity" android:configChanges="orientation|screenSize" />
-        <activity android:name=".PlayerCustomizationActivity" android:configChanges="orientation|screenSize" />
-        <activity android:name=".PlayerComparisonActivity" android:configChanges="orientation|screenSize" />
-        <activity android:name=".MatchDetailActivity" android:configChanges="orientation|screenSize" />
-        <activity android:name=".ChartFullscreenActivity" android:configChanges="orientation|screenSize" />
-        <activity android:name=".HistoryActivity" android:configChanges="orientation|screenSize" />
+        <activity
+            android:name="pl.maciek.squashscoreboard.lootbox.LootboxActivity"
+            android:configChanges="orientation|screenSize"
+            android:exported="false" />
+        <activity
+            android:name=".PlayerStatsActivity"
+            android:configChanges="orientation|screenSize"
+            android:exported="false" />
+        <activity
+            android:name=".PlayerDetailActivity"
+            android:configChanges="orientation|screenSize"
+            android:exported="false" />
+        <activity
+            android:name=".PlayerCustomizationActivity"
+            android:configChanges="orientation|screenSize"
+            android:exported="false" />
+        <activity
+            android:name=".PlayerComparisonActivity"
+            android:configChanges="orientation|screenSize"
+            android:exported="false" />
+        <activity
+            android:name=".MatchDetailActivity"
+            android:configChanges="orientation|screenSize"
+            android:exported="false" />
+        <activity
+            android:name=".ChartFullscreenActivity"
+            android:configChanges="orientation|screenSize"
+            android:exported="false" />
+        <activity
+            android:name=".HistoryActivity"
+            android:configChanges="orientation|screenSize"
+            android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize"

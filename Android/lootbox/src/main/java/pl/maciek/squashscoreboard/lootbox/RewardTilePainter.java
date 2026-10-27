@@ -7,13 +7,38 @@ import android.graphics.Path;
 import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.view.View;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-/** Shared tier tile art for the roulette and player collection. */
+/**
+ * [PERF-120HZ] Shared tier tile art for the roulette and player collection.
+ * Zero per-frame object allocations inside `draw()`:
+ * - `CONDENSED_BOLD` Typeface and `FLOW_PATH` geometry are pre-allocated once.
+ * - Static multi-color `LinearGradient` shaders are cached by reward ID.
+ */
 public final class RewardTilePainter {
+    private static final Typeface CONDENSED_BOLD = Typeface.create("sans-serif-condensed", Typeface.BOLD);
+    private static final Path FLOW_PATH = createFlowPath();
+    private static final Map<String, LinearGradient> SHADER_CACHE = new ConcurrentHashMap<>();
+    private static final LinearGradient[] RAINBOW_SHADERS = new LinearGradient[6];
+
     private RewardTilePainter() {}
+
+    private static Path createFlowPath() {
+        Path flow = new Path();
+        flow.moveTo(40, 35);
+        flow.cubicTo(47, 37, 43, 45, 51, 48);
+        flow.cubicTo(54, 50, 58, 49, 60, 54);
+        flow.cubicTo(63, 62, 53, 64, 43, 61);
+        flow.cubicTo(34, 59, 32, 55, 39, 50);
+        flow.cubicTo(44, 46, 38, 42, 40, 35);
+        flow.close();
+        return flow;
+    }
 
     public static void draw(Canvas canvas, float left, float top, float size,
                             RewardCatalog.Reward reward, Paint paint, View host) {
+        if (canvas == null || reward == null || paint == null) return;
         int save = canvas.save();
         canvas.translate(left, top);
         canvas.scale(size / 72f, size / 72f);
@@ -24,38 +49,24 @@ public final class RewardTilePainter {
         canvas.drawRoundRect(0, 0, 72, 72, 9, 9, paint);
         paint.setColor(0xAA151923);
         paint.setTextAlign(Paint.Align.CENTER);
-        paint.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
+        paint.setTypeface(CONDENSED_BOLD);
         paint.setTextSize(10);
         canvas.drawText(reward.tier.label.toUpperCase(), 36, 12, paint);
 
-        Path flow = new Path();
-        flow.moveTo(40, 35);
-        flow.cubicTo(47, 37, 43, 45, 51, 48);
-        flow.cubicTo(54, 50, 58, 49, 60, 54);
-        flow.cubicTo(63, 62, 53, 64, 43, 61);
-        flow.cubicTo(34, 59, 32, 55, 39, 50);
-        flow.cubicTo(44, 46, 38, 42, 40, 35);
-        flow.close();
         if (reward.colors.length > 1) {
-            int[] colors = reward.colors;
-            if (reward.animated) {
-                colors = colors.clone();
-                int shift = (int) ((System.currentTimeMillis() / 450) % 6);
-                for (int j = 0; j < colors.length; j++)
-                    colors[j] = reward.colors[(j + shift) % 6];
-                host.postInvalidateDelayed(80);
+            paint.setShader(shaderFor(reward));
+            if (reward.animated && host != null) {
+                host.postInvalidateDelayed(96);
             }
-            paint.setShader(new LinearGradient(35, 35, 61, 61,
-                colors, null, Shader.TileMode.CLAMP));
         } else {
             paint.setColor(reward.key());
         }
-        canvas.drawPath(flow, paint);
+        canvas.drawPath(FLOW_PATH, paint);
         paint.setShader(null);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(1.7f);
         paint.setColor(0xCC17202B);
-        canvas.drawPath(flow, paint);
+        canvas.drawPath(FLOW_PATH, paint);
 
         int canSave = canvas.save();
         canvas.rotate(-25, 28, 31);
@@ -76,5 +87,24 @@ public final class RewardTilePainter {
         paint.setTextAlign(Paint.Align.LEFT);
         paint.setStyle(Paint.Style.FILL);
         canvas.restoreToCount(save);
+    }
+
+    private static LinearGradient shaderFor(RewardCatalog.Reward reward) {
+        if (!reward.animated) {
+            return SHADER_CACHE.computeIfAbsent(reward.id, id ->
+                new LinearGradient(35, 35, 61, 61, reward.colors, null, Shader.TileMode.CLAMP)
+            );
+        }
+        int shift = (int) ((System.currentTimeMillis() / 450) % 6);
+        LinearGradient cached = RAINBOW_SHADERS[shift];
+        if (cached == null) {
+            int[] shifted = new int[reward.colors.length];
+            for (int j = 0; j < shifted.length; j++) {
+                shifted[j] = reward.colors[(j + shift) % 6];
+            }
+            cached = new LinearGradient(35, 35, 61, 61, shifted, null, Shader.TileMode.CLAMP);
+            RAINBOW_SHADERS[shift] = cached;
+        }
+        return cached;
     }
 }

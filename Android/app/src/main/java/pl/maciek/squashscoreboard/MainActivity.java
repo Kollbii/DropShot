@@ -81,6 +81,8 @@ public class MainActivity extends Activity {
     @Override
     public void onCreate(Bundle state) {
         super.onCreate(state);
+        // TEMPORARY: Trigger initial profile & default rainbow drop seeding for "Kacper" and "Łukasz" on startup.
+        ProfileStore.load(this);
         loadStyle();
         match.configure(AppPreferences.pointsPerSet(this), AppPreferences.setsPerMatch(this));
         courtStartMs = AppPreferences.courtStart(this);
@@ -92,7 +94,7 @@ public class MainActivity extends Activity {
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
         );
         setContentView(createContent());
-        currentMatchId = System.currentTimeMillis();
+        currentMatchId = InputValidator.generateSecureMatchId();
         startClock();
         restoreMatchFromIntent(getIntent());
         createMediaSession();
@@ -723,7 +725,7 @@ public class MainActivity extends Activity {
                 archiveCurrentMatch();
                 match.configure(pts, sts);
                 resetClock();
-                currentMatchId = System.currentTimeMillis();
+                currentMatchId = InputValidator.generateSecureMatchId();
             }
 
             AppPreferences.save(
@@ -1335,7 +1337,7 @@ public class MainActivity extends Activity {
             () -> {
                 finishedOverlay = null;
                 match.reset();
-                currentMatchId = System.currentTimeMillis();
+                currentMatchId = InputValidator.generateSecureMatchId();
                 resetClock();
                 refreshScreen();
             },
@@ -1382,7 +1384,7 @@ public class MainActivity extends Activity {
         pauseMatch();
         archiveCurrentMatch();
         match.reset();
-        currentMatchId = System.currentTimeMillis();
+        currentMatchId = InputValidator.generateSecureMatchId();
         resetClock();
         refreshScreen();
     }
@@ -1412,6 +1414,7 @@ public class MainActivity extends Activity {
         b.setMinimumHeight(dp(48));
         b.setPadding(dp(10), 0, dp(10), 0);
         b.setBackground(theme.interactiveBackground(this, color, 12, 1, theme.outlineVariant));
+        b.setFilterTouchesWhenObscured(true);
         return b;
     }
 

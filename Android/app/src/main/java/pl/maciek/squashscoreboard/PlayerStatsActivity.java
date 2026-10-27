@@ -107,8 +107,11 @@ public class PlayerStatsActivity extends Activity {
             emptyBox.addView(emptyAdd, new LinearLayout.LayoutParams(-2, dp(48)));
             list.addView(emptyBox, new LinearLayout.LayoutParams(-1, -2));
         } else {
+            // [PERF-120HZ] Single-pass batch calculation across all profiles (eliminates O(P * M) repeated JSON loads)
+            java.util.Map<String, PlayerStatistics.Summary> summaries = PlayerStatistics.calculateAll(this, profiles);
             for (PlayerProfile p : profiles) {
-                list.addView(profileRow(p), rowParams());
+                PlayerStatistics.Summary summary = summaries.get(p.id);
+                list.addView(profileRow(p, summary != null ? summary : new PlayerStatistics.Summary()), rowParams());
             }
         }
 
@@ -133,8 +136,7 @@ public class PlayerStatsActivity extends Activity {
         return lp;
     }
 
-    private View profileRow(PlayerProfile p) {
-        PlayerStatistics.Summary s = PlayerStatistics.calculate(this, p);
+    private View profileRow(PlayerProfile p, PlayerStatistics.Summary s) {
         int accent = theme.playerAccentOnSurface(p.color);
         int rate = s.matches == 0 ? 0 : Math.round(s.wins * 100f / s.matches);
         String avgPts = s.matches == 0 ? "0.0" : String.format(Locale.US, "%.1f", s.points / (float) s.matches);
