@@ -1,5 +1,6 @@
 package pl.maciek.squashscoreboard;
 
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -8,6 +9,8 @@ import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -22,6 +25,7 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.view.animation.DecelerateInterpolator;
 
 /**
  * Shared Material Design 3 tokens, WCAG 2.2 AA contrast colors, 8 dp spacing helpers,
@@ -322,10 +326,91 @@ public final class UiTheme {
         return spinner;
     }
 
-    /**
-     * Creates the 4-item Material Design 3 bottom navigation bar (Match, History, Players, Settings)
-     * so every top-level destination is reachable in 1 tap.
-     */
+    public CollapsibleBottomNav createCollapsibleBottomNav(Activity activity, int activeTab, Runnable onOpenSettingsHere) {
+        return new CollapsibleBottomNav(activity, activeTab, onOpenSettingsHere);
+    }
+
+    public final class CollapsibleBottomNav extends LinearLayout {
+        private static final long HIDE_DELAY_MS = 5000;
+        private final Handler handler = new Handler(Looper.getMainLooper());
+        private final Runnable hideTask = () -> setExpanded(false);
+        private final Button toggle;
+        private final View bar;
+        private ValueAnimator heightAnimator;
+        private boolean expanded;
+
+        private CollapsibleBottomNav(Activity activity, int activeTab, Runnable onOpenSettingsHere) {
+            super(activity);
+            setOrientation(VERTICAL);
+            setGravity(Gravity.CENTER_HORIZONTAL);
+            setClipChildren(true);
+
+            toggle = outlinedButton(activity, "⌃");
+            toggle.setTextSize(22);
+            toggle.setContentDescription("Show navigation menu");
+            toggle.setOnClickListener(v -> setExpanded(!expanded));
+            addView(toggle, new LinearLayout.LayoutParams(dp(activity, 72), dp(activity, 48)));
+
+            bar = createBottomNavBar(activity, activeTab, onOpenSettingsHere);
+            bar.setVisibility(GONE);
+            addView(bar, new LinearLayout.LayoutParams(-1, dp(activity, 56)));
+        }
+
+        public void onUserInteraction() {
+            if (expanded) scheduleHide();
+        }
+
+        private void scheduleHide() {
+            handler.removeCallbacks(hideTask);
+            handler.postDelayed(hideTask, HIDE_DELAY_MS);
+        }
+
+        private void setExpanded(boolean show) {
+            if (heightAnimator != null) heightAnimator.cancel();
+            expanded = show;
+            toggle.setText(show ? "⌄" : "⌃");
+            toggle.setContentDescription(show ? "Hide navigation menu" : "Show navigation menu");
+            handler.removeCallbacks(hideTask);
+            if (show) {
+                bar.setVisibility(VISIBLE);
+                scheduleHide();
+            }
+
+            int target = dp(getContext(), show ? 104 : 48);
+            if (isReduceMotionEnabled(getContext())) {
+                setHeight(target);
+                if (!show) bar.setVisibility(GONE);
+                return;
+            }
+            int start = getHeight() > 0 ? getHeight() : dp(getContext(), show ? 48 : 104);
+            heightAnimator = ValueAnimator.ofInt(start, target);
+            heightAnimator.setDuration(220);
+            heightAnimator.setInterpolator(new DecelerateInterpolator());
+            heightAnimator.addUpdateListener(animation -> setHeight((Integer) animation.getAnimatedValue()));
+            heightAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(android.animation.Animator animation) {
+                    if (!expanded) bar.setVisibility(GONE);
+                }
+            });
+            heightAnimator.start();
+        }
+
+        private void setHeight(int height) {
+            ViewGroup.LayoutParams params = getLayoutParams();
+            if (params != null) {
+                params.height = height;
+                setLayoutParams(params);
+            }
+        }
+
+        @Override protected void onDetachedFromWindow() {
+            handler.removeCallbacks(hideTask);
+            if (heightAnimator != null) heightAnimator.cancel();
+            super.onDetachedFromWindow();
+        }
+    }
+
+    /** Creates the 4-item bottom navigation bar used inside the expandable menu. */
     public View createBottomNavBar(Activity activity, int activeTab, Runnable onOpenSettingsHere) {
         LinearLayout bar = new LinearLayout(activity);
         bar.setOrientation(LinearLayout.HORIZONTAL);

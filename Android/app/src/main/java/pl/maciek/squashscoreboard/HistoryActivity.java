@@ -33,6 +33,12 @@ public class HistoryActivity extends Activity {
     private String searchQuery = "";
     private LinearLayout listContainer;
     private Button chipAll, chipFinished, chipUnfinished;
+    private UiTheme.CollapsibleBottomNav bottomNav;
+
+    @Override public void onUserInteraction() {
+        super.onUserInteraction();
+        if (bottomNav != null) bottomNav.onUserInteraction();
+    }
 
     @Override
     public void onCreate(Bundle state) {
@@ -131,8 +137,8 @@ public class HistoryActivity extends Activity {
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         // Bottom Navigation Bar
-        View navBar = theme.createBottomNavBar(this, UiTheme.TAB_HISTORY, null);
-        root.addView(navBar, new LinearLayout.LayoutParams(-1, dp(56)));
+        bottomNav = theme.createCollapsibleBottomNav(this, UiTheme.TAB_HISTORY, null);
+        root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(48)));
 
         updateChipStyles();
         populateList();

@@ -21,6 +21,12 @@ import java.util.Locale;
 
 public class PlayerStatsActivity extends Activity {
     private UiTheme theme;
+    private UiTheme.CollapsibleBottomNav bottomNav;
+
+    @Override public void onUserInteraction() {
+        super.onUserInteraction();
+        if (bottomNav != null) bottomNav.onUserInteraction();
+    }
 
     @Override
     public void onCreate(Bundle b) {
@@ -108,8 +114,8 @@ public class PlayerStatsActivity extends Activity {
         scroll.addView(list);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        View navBar = theme.createBottomNavBar(this, UiTheme.TAB_PLAYERS, null);
-        root.addView(navBar, new LinearLayout.LayoutParams(-1, dp(56)));
+        bottomNav = theme.createCollapsibleBottomNav(this, UiTheme.TAB_PLAYERS, null);
+        root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(48)));
         setContentView(root);
     }
 

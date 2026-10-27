@@ -32,7 +32,7 @@ import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
@@ -66,6 +66,7 @@ public class MainActivity extends Activity {
     private Button courtButton;
     private GradientDrawable courtBackground;
     private CourtAlertView courtAlertView;
+    private UiTheme.CollapsibleBottomNav bottomNav;
     private long courtStartMs;
     private final Handler clockHandler = new Handler(Looper.getMainLooper());
     private final Runnable clockTicker = new Runnable() {
@@ -160,6 +161,11 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
+    @Override public void onUserInteraction() {
+        super.onUserInteraction();
+        if (bottomNav != null) bottomNav.onUserInteraction();
+    }
+
     private View createContent() {
         boolean portrait = getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT;
         LinearLayout root = box(background);
@@ -167,11 +173,6 @@ public class MainActivity extends Activity {
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-
-        ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.squash_logo);
-        logo.setContentDescription("DropShot logo.");
-        logo.setPadding(0, dp(4), dp(8), dp(4));
 
         status = text("", 16, muted);
         status.setGravity(Gravity.CENTER);
@@ -218,16 +219,11 @@ public class MainActivity extends Activity {
         Button reset = iconButton("↺", "Start new match.", theme.playerPanelFill(AppPreferences.GREEN));
         reset.setOnClickListener(v -> confirmReset());
 
-        Button setup = iconButton("⚙", "Set up match.", surface);
-        setup.setOnClickListener(v -> showSettings());
-
-        header.addView(logo, new LinearLayout.LayoutParams(dp(44), dp(48)));
         header.addView(courtButton, new LinearLayout.LayoutParams(-2, dp(48)));
         header.addView(status, new LinearLayout.LayoutParams(0, dp(48), 1));
         header.addView(pause, actionBtnParams());
         header.addView(undo, actionBtnParams());
         header.addView(reset, actionBtnParams());
-        header.addView(setup, actionBtnParams());
         root.addView(header, new LinearLayout.LayoutParams(-1, dp(52)));
 
         LinearLayout scores = new LinearLayout(this);
@@ -251,8 +247,8 @@ public class MainActivity extends Activity {
         scores.addView(playerPanel(2, playerTwoColor), second);
         root.addView(scores, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        View navBar = theme.createBottomNavBar(this, UiTheme.TAB_MATCH, this::showSettings);
-        root.addView(navBar, new LinearLayout.LayoutParams(-1, dp(56)));
+        bottomNav = theme.createCollapsibleBottomNav(this, UiTheme.TAB_MATCH, this::showSettings);
+        root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(48)));
 
         FrameLayout screen = new FrameLayout(this);
         screen.setBackgroundColor(background);
@@ -329,12 +325,14 @@ public class MainActivity extends Activity {
     }
 
     private void showSettings() {
-        LinearLayout form = box(surface);
-        form.setPadding(dp(20), dp(12), dp(20), dp(12));
+        LinearLayout playersForm = settingsPage();
+        LinearLayout appearanceForm = settingsPage();
+        LinearLayout remoteForm = settingsPage();
+        LinearLayout courtForm = settingsPage();
 
         TextView note = text("A change to the players or the rules starts a new match. Remote and theme settings apply immediately.", 16, muted);
         note.setPadding(0, 0, 0, dp(8));
-        form.addView(note);
+        playersForm.addView(note);
 
         List<PlayerProfile> profiles = ProfileStore.load(this);
         String[] choices = new String[profiles.size() + 1];
@@ -357,49 +355,78 @@ public class MainActivity extends Activity {
         LinearLayout nameTwoRow = settingRow("Name of Player 2", nameTwo);
         LinearLayout colorTwoRow = settingRow("Color for Player 2", colorTwo);
 
-        addSectionHeader(form, "PLAYERS AND MATCH RULES");
-        addSetting(form, "Profile for Player 1", profileOne);
-        form.addView(nameOneRow);
-        form.addView(colorOneRow);
-        addSetting(form, "Profile for Player 2", profileTwo);
-        form.addView(nameTwoRow);
-        form.addView(colorTwoRow);
+        addSetting(playersForm, "Profile for Player 1", profileOne);
+        playersForm.addView(nameOneRow);
+        playersForm.addView(colorOneRow);
+        addSetting(playersForm, "Profile for Player 2", profileTwo);
+        playersForm.addView(nameTwoRow);
+        playersForm.addView(colorTwoRow);
         profileOne.setOnItemSelectedListener(profileVisibility(profileOne, nameOneRow, colorOneRow));
         profileTwo.setOnItemSelectedListener(profileVisibility(profileTwo, nameTwoRow, colorTwoRow));
 
-        addSetting(form, "Points to win a game", points);
-        addSetting(form, "Games to win the match", sets);
+        addSetting(playersForm, "Points to win a game", points);
+        addSetting(playersForm, "Games to win the match", sets);
 
-        addSectionHeader(form, "APPEARANCE");
         CheckBox darkBox = checkBox("Use dark theme", darkTheme);
         CheckBox hcBox = checkBox("Use high-contrast mode", highContrast);
-        form.addView(darkBox);
-        form.addView(hcBox);
+        appearanceForm.addView(darkBox);
+        appearanceForm.addView(hcBox);
 
-        addSectionHeader(form, "BLUETOOTH REMOTE CONTROL KEYS");
         Spinner pilotOne = spinner(remoteNames(), remoteIndex(remoteOne));
         Spinner pilotTwo = spinner(remoteNames(), remoteIndex(remoteTwo));
         Spinner pilotUndo = spinner(remoteNames(), remoteIndex(remoteUndo));
         Spinner pilotReset = spinner(remoteNames(), remoteIndex(remoteReset));
-        addSetting(form, "Remote key for Player 1", pilotOne);
-        addSetting(form, "Remote key for Player 2", pilotTwo);
-        addSetting(form, "Remote key for Undo", pilotUndo);
-        addSetting(form, "Remote key for Reset", pilotReset);
+        addSetting(remoteForm, "Remote key for Player 1", pilotOne);
+        addSetting(remoteForm, "Remote key for Player 2", pilotTwo);
+        addSetting(remoteForm, "Remote key for Undo", pilotUndo);
+        addSetting(remoteForm, "Remote key for Reset", pilotReset);
 
-        addSectionHeader(form, "COURT TIMER AND HELP");
         Button courtSettings = theme.tonalButton(this, "Set up court timer");
         LinearLayout.LayoutParams courtParams = new LinearLayout.LayoutParams(-1, dp(48));
         courtParams.topMargin = dp(8);
-        form.addView(courtSettings, courtParams);
+        courtForm.addView(courtSettings, courtParams);
 
         Button helpBtn = theme.outlinedButton(this, "Open help and remote guide");
         LinearLayout.LayoutParams helpParams = new LinearLayout.LayoutParams(-1, dp(48));
         helpParams.topMargin = dp(8);
         helpBtn.setOnClickListener(v -> showHelpDialog());
-        form.addView(helpBtn, helpParams);
+        courtForm.addView(helpBtn, helpParams);
 
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(form);
+        LinearLayout settingsContent = box(surface);
+        HorizontalScrollView tabStrip = new HorizontalScrollView(this);
+        tabStrip.setHorizontalScrollBarEnabled(false);
+        tabStrip.setFillViewport(true);
+        LinearLayout tabs = new LinearLayout(this);
+        tabs.setGravity(Gravity.CENTER_VERTICAL);
+        tabStrip.addView(tabs);
+        settingsContent.addView(tabStrip, new LinearLayout.LayoutParams(-1, dp(56)));
+
+        FrameLayout pageFrame = new FrameLayout(this);
+        String[] titles = {"Players & rules", "Appearance", "Remote keys", "Court & help"};
+        LinearLayout[] forms = {playersForm, appearanceForm, remoteForm, courtForm};
+        ScrollView[] pages = new ScrollView[forms.length];
+        Button[] tabButtons = new Button[forms.length];
+        for (int i = 0; i < forms.length; i++) {
+            final int selected = i;
+            pages[i] = new ScrollView(this);
+            pages[i].setFillViewport(true);
+            pages[i].addView(forms[i]);
+            pages[i].setVisibility(i == 0 ? View.VISIBLE : View.GONE);
+            pageFrame.addView(pages[i], new FrameLayout.LayoutParams(-1, -1));
+
+            Button tab = theme.outlinedButton(this, titles[i]);
+            tab.setTextSize(15);
+            tab.setSingleLine(true);
+            tab.setContentDescription(titles[i] + ", settings tab " + (i + 1) + " of 4");
+            tab.setOnClickListener(v -> selectSettingsTab(selected, pages, tabButtons));
+            tabButtons[i] = tab;
+            LinearLayout.LayoutParams tabParams = new LinearLayout.LayoutParams(-2, dp(48));
+            tabParams.setMargins(dp(4), 0, dp(4), 0);
+            tabs.addView(tab, tabParams);
+        }
+        selectSettingsTab(0, pages, tabButtons);
+        int pageHeight = Math.min(dp(480), Math.max(dp(180), getResources().getDisplayMetrics().heightPixels - dp(190)));
+        settingsContent.addView(pageFrame, new LinearLayout.LayoutParams(-1, pageHeight));
         View[] settingsInputs = {
             profileOne, profileTwo, nameOne, nameTwo, points, sets,
             darkBox, hcBox, colorOne, colorTwo, pilotOne, pilotTwo, pilotUndo, pilotReset
@@ -408,7 +435,7 @@ public class MainActivity extends Activity {
 
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("Set up match and settings")
-            .setView(scroll)
+            .setView(settingsContent)
             .setNegativeButton("Cancel action", null)
             .setPositiveButton("Save settings", null)
             .create();
@@ -471,11 +498,27 @@ public class MainActivity extends Activity {
         return box;
     }
 
-    private void addSectionHeader(LinearLayout form, String title) {
-        TextView header = text(title, 16, theme.primary);
-        header.setTypeface(Typeface.DEFAULT_BOLD);
-        header.setPadding(0, dp(14), 0, dp(4));
-        form.addView(header);
+    private LinearLayout settingsPage() {
+        LinearLayout page = box(surface);
+        page.setPadding(dp(20), dp(12), dp(20), dp(12));
+        return page;
+    }
+
+    private void selectSettingsTab(int selected, ScrollView[] pages, Button[] tabs) {
+        for (int i = 0; i < tabs.length; i++) {
+            boolean active = i == selected;
+            pages[i].setVisibility(active ? View.VISIBLE : View.GONE);
+            tabs[i].setSelected(active);
+            tabs[i].setTypeface(active ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            tabs[i].setTextColor(active ? theme.onSecondaryContainer : theme.onSurface);
+            tabs[i].setBackground(theme.interactiveBackground(
+                this,
+                active ? theme.secondaryContainer : theme.surfaceLow,
+                24,
+                1,
+                active ? theme.primary : theme.outline
+            ));
+        }
     }
 
     private AdapterView.OnItemSelectedListener profileVisibility(final Spinner spinner, final View... rows) {
