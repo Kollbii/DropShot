@@ -8,8 +8,6 @@ import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.LinearGradient;
-import android.graphics.Shader;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -27,6 +25,8 @@ import java.util.Random;
 
 /** Self-contained placeholder lootbox screen; the host app only needs an entry point. */
 public final class LootboxActivity extends Activity {
+    public static final String EXTRA_PROFILE_ID = "reward_profile_id";
+    public static final String EXTRA_PLAYER_NAME = "reward_player_name";
     private static final int BACKGROUND = 0xFF171A22;
     private static final int FOREGROUND = 0xFFF5F2EA;
     private static final int MUTED = 0xFFB5BAC5;
@@ -55,9 +55,12 @@ public final class LootboxActivity extends Activity {
     private boolean landscape;
     private boolean rewardDismissed;
     private boolean rewardAlreadyOwned;
+    private String profileId;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        profileId = getIntent().getStringExtra(EXTRA_PROFILE_ID);
+        if (profileId == null) { finish(); return; }
         buildScreen();
     }
 
@@ -95,7 +98,8 @@ public final class LootboxActivity extends Activity {
 
         if (!landscape) {
             content.addView(title, new LinearLayout.LayoutParams(-1, dp(40)));
-            TextView subtitle = label("Crack the ball. See where the reel stops.", 16, MUTED);
+            String playerName = getIntent().getStringExtra(EXTRA_PLAYER_NAME);
+            TextView subtitle = label("Rewards for " + (playerName == null ? "player" : playerName), 16, MUTED);
             subtitle.setGravity(Gravity.CENTER);
             content.addView(subtitle, new LinearLayout.LayoutParams(-1, dp(32)));
         }
@@ -178,7 +182,7 @@ public final class LootboxActivity extends Activity {
         rewardDismissed = false;
         lastResult = roller.roll();
         lastReward = RewardCatalog.pick(lastResult, visualRandom);
-        rewardAlreadyOwned = RewardInventory.owns(this, lastReward);
+        rewardAlreadyOwned = RewardInventory.owns(this, profileId, lastReward);
         for (int i = 0; i < reelStrip.length; i++)
             reelStrip[i] = RewardCatalog.pick(roller.roll(), visualRandom);
         reelStrip[ReelView.TARGET] = lastReward;
@@ -189,7 +193,7 @@ public final class LootboxActivity extends Activity {
         if (reduceMotion()) {
             crackProgress = popProgress = reelProgress = 1f;
             phase = WON;
-            RewardInventory.unlock(this, lastReward);
+            RewardInventory.unlock(this, profileId, lastReward);
             renderState();
             return;
         }
@@ -244,7 +248,7 @@ public final class LootboxActivity extends Activity {
         if (phase != SPINNING) return;
         phase = WON;
         rewardDismissed = false;
-        RewardInventory.unlock(this, lastReward);
+        RewardInventory.unlock(this, profileId, lastReward);
         reelProgress = 1f;
         resultLabel.setText("You got: " + lastReward.name + " · " + lastResult.label);
         resultLabel.setTextColor(lastResult.color);
@@ -479,7 +483,7 @@ public final class LootboxActivity extends Activity {
                 if (x + size / 2 < 0 || x - size / 2 > getWidth()) continue;
                 RewardCatalog.Reward square = strip[Math.floorMod(i, strip.length)];
                 if (square == null) continue;
-                drawTierTile(canvas, x - size / 2, top, size, square);
+                RewardTilePainter.draw(canvas, x - size / 2, top, size, square, paint, this);
             }
             paint.setColor(ACCENT);
             canvas.drawRect(center - dp(2), 0, center + dp(2), Math.max(dp(10), top - dp(3)), paint);
@@ -487,72 +491,6 @@ public final class LootboxActivity extends Activity {
             canvas.restoreToCount(save);
         }
 
-        private void drawTierTile(Canvas canvas, float left, float top,
-                                  float size, RewardCatalog.Reward reward) {
-            int save = canvas.save();
-            canvas.translate(left, top);
-            canvas.scale(size / 72f, size / 72f);
 
-            // The square always shows rarity; only the poured paint shows the prize color.
-            paint.setShader(null);
-            paint.setStyle(Paint.Style.FILL);
-            paint.setColor(reward.tier.color);
-            canvas.drawRoundRect(0, 0, 72, 72, 9, 9, paint);
-            paint.setColor(0xAA151923);
-            paint.setTextAlign(Paint.Align.CENTER);
-            paint.setTypeface(android.graphics.Typeface.create("sans-serif-condensed",
-                android.graphics.Typeface.BOLD));
-            paint.setTextSize(10);
-            canvas.drawText(reward.tier.label.toUpperCase(), 36, 12, paint);
-
-            Path flow = new Path();
-            flow.moveTo(40, 35);
-            flow.cubicTo(47, 37, 43, 45, 51, 48);
-            flow.cubicTo(54, 50, 58, 49, 60, 54);
-            flow.cubicTo(63, 62, 53, 64, 43, 61);
-            flow.cubicTo(34, 59, 32, 55, 39, 50);
-            flow.cubicTo(44, 46, 38, 42, 40, 35);
-            flow.close();
-            if (reward.colors.length > 1) {
-                int[] colors = reward.colors;
-                if (reward.animated) {
-                    colors = colors.clone();
-                    int shift = (int) ((System.currentTimeMillis() / 450) % 6);
-                    for (int j = 0; j < colors.length; j++)
-                        colors[j] = reward.colors[(j + shift) % 6];
-                    postInvalidateDelayed(80);
-                }
-                paint.setShader(new LinearGradient(35, 35, 61, 61,
-                    colors, null, Shader.TileMode.CLAMP));
-            } else {
-                paint.setColor(reward.key());
-            }
-            canvas.drawPath(flow, paint);
-            paint.setShader(null);
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(1.7f);
-            paint.setColor(0xCC17202B);
-            canvas.drawPath(flow, paint);
-
-            int canSave = canvas.save();
-            canvas.rotate(-25, 28, 31);
-            paint.setStyle(Paint.Style.FILL);
-            paint.setColor(0xFF202A34);
-            canvas.drawRoundRect(14, 21, 42, 44, 4, 4, paint);
-            paint.setColor(0xFFF7F3EA);
-            canvas.drawRoundRect(16, 22, 40, 42, 3, 3, paint);
-            paint.setColor(reward.colors.length > 1 ? reward.colors[1] : reward.key());
-            canvas.drawRect(17, 34, 39, 41, paint);
-            paint.setColor(0xFF202A34);
-            canvas.drawOval(13, 17, 43, 25, paint);
-            paint.setColor(0xFFF7F3EA);
-            canvas.drawOval(16, 18, 40, 23, paint);
-            canvas.restoreToCount(canSave);
-
-            paint.setTypeface(null);
-            paint.setTextAlign(Paint.Align.LEFT);
-            paint.setStyle(Paint.Style.FILL);
-            canvas.restoreToCount(save);
-        }
     }
 }

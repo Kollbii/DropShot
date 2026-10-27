@@ -119,14 +119,14 @@ public final class UiTheme {
 
     /** Player color keys are supplied by the shared reward catalog. */
     public static int[] playerColors(Context context) {
-        RewardCatalog.Reward[] rewards = RewardInventory.available(context);
+        RewardCatalog.Reward[] rewards = RewardInventory.available(context, null);
         int[] colors = new int[rewards.length];
         for (int i = 0; i < rewards.length; i++) colors[i] = rewards[i].key();
         return colors;
     }
 
     public static String[] playerColorNames(Context context) {
-        RewardCatalog.Reward[] rewards = RewardInventory.available(context);
+        RewardCatalog.Reward[] rewards = RewardInventory.available(context, null);
         String[] names = new String[rewards.length];
         for (int i = 0; i < rewards.length; i++)
             names[i] = rewards[i].name + " · " + rewards[i].tier.label;

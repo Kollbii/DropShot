@@ -134,7 +134,28 @@ public class MainActivity extends Activity {
         if (watchCommandServer != null) watchCommandServer.start();
         clockHandler.removeCallbacks(clockTicker);
         clockHandler.post(clockTicker);
+        syncSelectedProfiles();
         refreshScreen();
+    }
+
+    private void syncSelectedProfiles() {
+        PlayerProfile one = ProfileStore.find(this, playerOneProfileId);
+        PlayerProfile two = ProfileStore.find(this, playerTwoProfileId);
+        boolean changed = false;
+        if (one != null && (!one.name.equals(playerOneName) || one.color != playerOneColor)) {
+            playerOneName = one.name;
+            playerOneColor = one.color;
+            changed = true;
+        }
+        if (two != null && (!two.name.equals(playerTwoName) || two.color != playerTwoColor)) {
+            playerTwoName = two.name;
+            playerTwoColor = two.color;
+            changed = true;
+        }
+        if (changed) {
+            AppPreferences.save(this, darkTheme, playerOneColor, playerTwoColor, remoteOne, remoteTwo);
+            setContentView(createContent());
+        }
     }
 
     @Override

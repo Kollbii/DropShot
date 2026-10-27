@@ -11,6 +11,7 @@
         <activity android:name="pl.maciek.squashscoreboard.lootbox.LootboxActivity" android:configChanges="orientation|screenSize" />
         <activity android:name=".PlayerStatsActivity" android:configChanges="orientation|screenSize" />
         <activity android:name=".PlayerDetailActivity" android:configChanges="orientation|screenSize" />
+        <activity android:name=".PlayerCustomizationActivity" android:configChanges="orientation|screenSize" />
         <activity android:name=".PlayerComparisonActivity" android:configChanges="orientation|screenSize" />
         <activity android:name=".MatchDetailActivity" android:configChanges="orientation|screenSize" />
         <activity android:name=".ChartFullscreenActivity" android:configChanges="orientation|screenSize" />

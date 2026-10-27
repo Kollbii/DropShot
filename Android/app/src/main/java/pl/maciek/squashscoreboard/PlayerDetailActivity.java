@@ -2,19 +2,17 @@ package pl.maciek.squashscoreboard;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Typeface;
-import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
-import android.text.InputType;
 import android.view.Gravity;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import android.widget.Spinner;
 import android.widget.TextView;
 import java.util.Locale;
+import pl.maciek.squashscoreboard.lootbox.RewardInventory;
 
 public class PlayerDetailActivity extends Activity {
     private PlayerProfile profile;
@@ -59,16 +57,13 @@ public class PlayerDetailActivity extends Activity {
         back.setContentDescription("Go back.");
         back.setOnClickListener(v -> finish());
 
-        TextView title = t(
-            profile.name + "  (Color: " + UiTheme.playerColorName(profile.color) + ")",
-            24,
-            accent
-        );
+        TextView title = t(profile.name, 24, accent);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setPadding(dp(16), 0, dp(16), 0);
 
         Button edit = theme.tonalButton(this, "Edit player");
-        edit.setOnClickListener(v -> editProfile());
+        edit.setOnClickListener(v -> startActivity(new Intent(this, PlayerCustomizationActivity.class)
+            .putExtra("profile", profile.id)));
 
         Button del = theme.dangerButton(this, "Delete player");
         del.setOnClickListener(v ->
@@ -86,7 +81,7 @@ public class PlayerDetailActivity extends Activity {
         header.addView(back, new LinearLayout.LayoutParams(-2, dp(48)));
         header.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
         header.addView(edit, btnMargin());
-        header.addView(del, btnMargin());
+        if (!RewardInventory.isDeveloper(this, profile.id)) header.addView(del, btnMargin());
         root.addView(header, new LinearLayout.LayoutParams(-1, dp(52)));
 
         ScrollView scroll = new ScrollView(this);
@@ -117,74 +112,6 @@ public class PlayerDetailActivity extends Activity {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, dp(4), 0, dp(4));
         parent.addView(card, lp);
-    }
-
-    private void editProfile() {
-        LinearLayout form = box(theme.surface);
-        form.setPadding(dp(20), dp(12), dp(20), dp(12));
-
-        EditText name = theme.editField(this, profile.name, "Player name", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        Spinner color = theme.styledSpinner(this, UiTheme.playerColorNames(this), colorIndex(profile.color));
-
-        TextView nameLabel = t("Player name", 16, theme.onSurfaceVariant);
-        TextView colorLabel = t("Player color", 16, theme.onSurfaceVariant);
-
-        form.addView(nameLabel);
-        form.addView(name, new LinearLayout.LayoutParams(-1, dp(48)));
-        form.addView(colorLabel);
-        form.addView(color, new LinearLayout.LayoutParams(-1, dp(48)));
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("Edit player")
-            .setView(form)
-            .setNegativeButton("Cancel action", null)
-            .setPositiveButton("Save player", null)
-            .create();
-
-        dialog.setOnShowListener(ignored -> {
-            if (dialog.getWindow() != null) {
-                dialog.getWindow().setBackgroundDrawable(new ColorDrawable(theme.surface));
-            }
-            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(theme.primary);
-            Button saveBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
-            saveBtn.setTextColor(theme.primary);
-            saveBtn.setOnClickListener(v -> {
-                String n = name.getText().toString().trim();
-                if (n.isEmpty()) {
-                    new AlertDialog.Builder(this)
-                        .setTitle("Empty player name")
-                        .setMessage("The player name is empty. Each player profile must have a name. Enter a name in the text field.")
-                        .setPositiveButton("Close dialog", null)
-                        .show();
-                    return;
-                }
-                PlayerProfile duplicate = ProfileStore.findByName(this, n);
-                if (duplicate != null && !duplicate.id.equals(profile.id)) {
-                    new AlertDialog.Builder(this)
-                        .setTitle("Duplicate player name")
-                        .setMessage("This player name already exists. Each player profile must have a unique name. Enter a different name.")
-                        .setPositiveButton("Close dialog", null)
-                        .show();
-                    return;
-                }
-                PlayerProfile changed = new PlayerProfile(profile.id, n, colorAt(color.getSelectedItemPosition()));
-                ProfileStore.update(this, changed);
-                MatchHistoryStore.renameProfile(this, profile.id, profile.name, n);
-                dialog.dismiss();
-                draw();
-            });
-        });
-        dialog.show();
-    }
-
-    private int colorAt(int i) {
-        return UiTheme.playerColors(this)[i];
-    }
-
-    private int colorIndex(int c) {
-        int[] all = UiTheme.playerColors(this);
-        for (int i = 0; i < all.length; i++) if (all[i] == c) return i;
-        return 0;
     }
 
     private LinearLayout box(int c) {

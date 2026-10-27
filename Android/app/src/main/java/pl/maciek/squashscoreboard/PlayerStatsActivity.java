@@ -114,7 +114,7 @@ public class PlayerStatsActivity extends Activity {
 
         Button lootbox = theme.outlinedButton(this, "Open lootbox prototype");
         lootbox.setContentDescription("Open the lootbox prototype from player profiles");
-        lootbox.setOnClickListener(v -> startActivity(new Intent(this, LootboxActivity.class)));
+        lootbox.setOnClickListener(v -> chooseLootboxPlayer());
         LinearLayout.LayoutParams lootboxParams = new LinearLayout.LayoutParams(-1, dp(48));
         lootboxParams.topMargin = dp(16);
         list.addView(lootbox, lootboxParams);
@@ -144,7 +144,7 @@ public class PlayerStatsActivity extends Activity {
         row.setMinimumHeight(dp(92));
         row.setBackground(theme.interactiveBackground(this, theme.surfaceLow, 14, 2, accent));
 
-        String headerText = p.name + "  (" + UiTheme.playerColorName(p.color) + ")";
+        String headerText = p.name;
         TextView name = text(headerText, 20, accent);
         name.setTypeface(Typeface.DEFAULT_BOLD);
 
@@ -240,6 +240,22 @@ public class PlayerStatsActivity extends Activity {
             });
         });
         dialog.show();
+    }
+
+    private void chooseLootboxPlayer() {
+        List<PlayerProfile> profiles = ProfileStore.load(this);
+        String[] names = new String[profiles.size()];
+        for (int i = 0; i < profiles.size(); i++) names[i] = profiles.get(i).name;
+        new AlertDialog.Builder(this)
+            .setTitle("Open lootbox for player")
+            .setItems(names, (dialog, index) -> {
+                PlayerProfile player = profiles.get(index);
+                startActivity(new Intent(this, LootboxActivity.class)
+                    .putExtra(LootboxActivity.EXTRA_PROFILE_ID, player.id)
+                    .putExtra(LootboxActivity.EXTRA_PLAYER_NAME, player.name));
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
     }
 
     private void addProfile() {
