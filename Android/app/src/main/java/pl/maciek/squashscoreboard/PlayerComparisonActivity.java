@@ -123,13 +123,13 @@ public class PlayerComparisonActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setBackground(theme.roundedBox(theme.surfaceHigh, 10, 1, theme.outlineVariant, this));
 
-        TextView first = cell(UiTheme.playerSymbol(one.color) + " " + one.name, 18, c1, true);
+        TextView first = cell(one.name, 18, c1, true);
         first.setSingleLine(true);
         first.setEllipsize(TextUtils.TruncateAt.END);
 
         TextView middle = cell("Metric", 16, theme.onSurfaceVariant, true);
 
-        TextView second = cell(UiTheme.playerSymbol(two.color) + " " + two.name, 18, c2, true);
+        TextView second = cell(two.name, 18, c2, true);
         second.setSingleLine(true);
         second.setEllipsize(TextUtils.TruncateAt.END);
 

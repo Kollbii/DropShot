@@ -138,7 +138,7 @@ public class HistoryActivity extends Activity {
 
         // Bottom Navigation Bar
         bottomNav = theme.createCollapsibleBottomNav(this, UiTheme.TAB_HISTORY, null);
-        root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(48)));
+        root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(56)));
 
         updateChipStyles();
         populateList();
@@ -269,8 +269,7 @@ public class HistoryActivity extends Activity {
         LinearLayout infoCol = new LinearLayout(this);
         infoCol.setOrientation(LinearLayout.VERTICAL);
 
-        String titleText = UiTheme.playerSymbol(record.playerOneColor) + " " + record.playerOneName
-            + "   vs   " + UiTheme.playerSymbol(record.playerTwoColor) + " " + record.playerTwoName;
+        String titleText = record.playerOneName + "   vs   " + record.playerTwoName;
         TextView names = text(titleText, 20, theme.onSurface);
         names.setTypeface(Typeface.DEFAULT_BOLD);
         names.setSingleLine(true);

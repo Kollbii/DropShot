@@ -115,7 +115,7 @@ public class PlayerStatsActivity extends Activity {
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         bottomNav = theme.createCollapsibleBottomNav(this, UiTheme.TAB_PLAYERS, null);
-        root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(48)));
+        root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(56)));
         setContentView(root);
     }
 
@@ -136,7 +136,7 @@ public class PlayerStatsActivity extends Activity {
         row.setMinimumHeight(dp(92));
         row.setBackground(theme.interactiveBackground(this, theme.surfaceLow, 14, 2, accent));
 
-        String headerText = UiTheme.playerSymbol(p.color) + "  " + p.name + "  (" + UiTheme.playerColorName(p.color) + ")";
+        String headerText = p.name + "  (" + UiTheme.playerColorName(p.color) + ")";
         TextView name = text(headerText, 20, accent);
         name.setTypeface(Typeface.DEFAULT_BOLD);
 

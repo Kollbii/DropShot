@@ -60,7 +60,7 @@ public class PlayerDetailActivity extends Activity {
         back.setOnClickListener(v -> finish());
 
         TextView title = t(
-            UiTheme.playerSymbol(profile.color) + "  " + profile.name + "  (Color: " + UiTheme.playerColorName(profile.color) + ")",
+            profile.name + "  (Color: " + UiTheme.playerColorName(profile.color) + ")",
             24,
             accent
         );

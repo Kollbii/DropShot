@@ -99,12 +99,12 @@ public class ChartFullscreenActivity extends Activity {
         LinearLayout legend = new LinearLayout(this);
         legend.setGravity(Gravity.CENTER);
         TextView p1 = text(
-            UiTheme.playerSymbol(r.playerOneColor) + " " + r.playerOneName + " (solid line)",
+            r.playerOneName + " (solid line)",
             16,
             theme.playerAccentOnSurface(r.playerOneColor)
         );
         TextView p2 = text(
-            UiTheme.playerSymbol(r.playerTwoColor) + " " + r.playerTwoName + " (dashed line)",
+            r.playerTwoName + " (dashed line)",
             16,
             theme.playerAccentOnSurface(r.playerTwoColor)
         );

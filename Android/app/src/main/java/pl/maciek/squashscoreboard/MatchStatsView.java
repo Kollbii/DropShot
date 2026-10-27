@@ -42,9 +42,9 @@ public final class MatchStatsView extends ScrollView {
 
         row(
             rows,
-            UiTheme.playerSymbol(record.playerOneColor) + " " + record.playerOneName,
+            record.playerOneName,
             "METRIC",
-            UiTheme.playerSymbol(record.playerTwoColor) + " " + record.playerTwoName,
+            record.playerTwoName,
             c1,
             c2,
             true

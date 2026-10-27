@@ -169,7 +169,7 @@ public class MainActivity extends Activity {
     private View createContent() {
         boolean portrait = getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT;
         LinearLayout root = box(background);
-        root.setPadding(dp(16), dp(8), dp(16), dp(8));
+        root.setPadding(dp(16), dp(8), dp(16), dp(16));
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -197,7 +197,7 @@ public class MainActivity extends Activity {
         courtButton.setBackground(courtBackground);
         courtButton.setOnClickListener(v -> onCourtTimerClick());
         courtButton.setOnLongClickListener(v -> {
-            showCourtSettings();
+            showSettings(3);
             return true;
         });
 
@@ -229,6 +229,7 @@ public class MainActivity extends Activity {
         LinearLayout scores = new LinearLayout(this);
         scores.setOrientation(portrait ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         scores.setGravity(Gravity.CENTER);
+        if (!portrait) scores.setPadding(0, dp(8), 0, 0);
 
         LinearLayout.LayoutParams first = portrait
             ? new LinearLayout.LayoutParams(-1, 0, 1)
@@ -238,23 +239,22 @@ public class MainActivity extends Activity {
             : new LinearLayout.LayoutParams(0, -1, 1);
         if (portrait) {
             first.setMargins(0, dp(6), 0, dp(4));
-            second.setMargins(0, dp(4), 0, dp(6));
+            second.setMargins(0, dp(4), 0, 0);
         } else {
-            first.setMargins(0, dp(8), dp(6), dp(8));
-            second.setMargins(dp(6), dp(8), 0, dp(8));
+            first.setMargins(0, 0, dp(6), 0);
+            second.setMargins(dp(6), 0, 0, 0);
         }
         scores.addView(playerPanel(1, playerOneColor), first);
         scores.addView(playerPanel(2, playerTwoColor), second);
         root.addView(scores, new LinearLayout.LayoutParams(-1, 0, 1));
-
-        bottomNav = theme.createCollapsibleBottomNav(this, UiTheme.TAB_MATCH, this::showSettings);
-        root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(48)));
 
         FrameLayout screen = new FrameLayout(this);
         screen.setBackgroundColor(background);
         screen.addView(root, new FrameLayout.LayoutParams(-1, -1));
         courtAlertView = new CourtAlertView(this);
         screen.addView(courtAlertView, new FrameLayout.LayoutParams(-1, -1));
+        bottomNav = theme.createCollapsibleBottomNav(this, UiTheme.TAB_MATCH, this::showSettings);
+        screen.addView(bottomNav, new FrameLayout.LayoutParams(-1, dp(56), Gravity.BOTTOM));
         return screen;
     }
 
@@ -282,7 +282,7 @@ public class MainActivity extends Activity {
             return true;
         });
 
-        String nameText = UiTheme.playerSymbol(rawColor) + "  " + (player == 1 ? playerOneName : playerTwoName);
+        String nameText = player == 1 ? playerOneName : playerTwoName;
         TextView title = text(nameText, 24, Color.WHITE);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setGravity(Gravity.CENTER);
@@ -325,6 +325,10 @@ public class MainActivity extends Activity {
     }
 
     private void showSettings() {
+        showSettings(0);
+    }
+
+    private void showSettings(int initialTab) {
         LinearLayout playersForm = settingsPage();
         LinearLayout appearanceForm = settingsPage();
         LinearLayout remoteForm = settingsPage();
@@ -381,10 +385,16 @@ public class MainActivity extends Activity {
         addSetting(remoteForm, "Remote key for Undo", pilotUndo);
         addSetting(remoteForm, "Remote key for Reset", pilotReset);
 
-        Button courtSettings = theme.tonalButton(this, "Set up court timer");
-        LinearLayout.LayoutParams courtParams = new LinearLayout.LayoutParams(-1, dp(48));
-        courtParams.topMargin = dp(8);
-        courtForm.addView(courtSettings, courtParams);
+        EditText duration = field(String.valueOf(AppPreferences.courtDuration(this)), InputType.TYPE_CLASS_NUMBER);
+        EditText green = field(String.valueOf(AppPreferences.courtGreen(this)), InputType.TYPE_CLASS_NUMBER);
+        EditText yellow = field(String.valueOf(AppPreferences.courtYellow(this)), InputType.TYPE_CLASS_NUMBER);
+        EditText red = field(String.valueOf(AppPreferences.courtRed(this)), InputType.TYPE_CLASS_NUMBER);
+        addSetting(courtForm, "Rental duration (min)", duration);
+        addSetting(courtForm, "Green warning (min before end)", green);
+        addSetting(courtForm, "Yellow warning (min before end)", yellow);
+        addSetting(courtForm, "Red warning (min before end)", red);
+        CheckBox vibration = checkBox("Vibrate at warnings (1, 2, and 3 pulses)", AppPreferences.courtVibration(this));
+        courtForm.addView(vibration);
 
         Button helpBtn = theme.outlinedButton(this, "Open help and remote guide");
         LinearLayout.LayoutParams helpParams = new LinearLayout.LayoutParams(-1, dp(48));
@@ -424,12 +434,13 @@ public class MainActivity extends Activity {
             tabParams.setMargins(dp(4), 0, dp(4), 0);
             tabs.addView(tab, tabParams);
         }
-        selectSettingsTab(0, pages, tabButtons);
+        selectSettingsTab(initialTab, pages, tabButtons);
         int pageHeight = Math.min(dp(480), Math.max(dp(180), getResources().getDisplayMetrics().heightPixels - dp(190)));
         settingsContent.addView(pageFrame, new LinearLayout.LayoutParams(-1, pageHeight));
         View[] settingsInputs = {
             profileOne, profileTwo, nameOne, nameTwo, points, sets,
-            darkBox, hcBox, colorOne, colorTwo, pilotOne, pilotTwo, pilotUndo, pilotReset
+            darkBox, hcBox, colorOne, colorTwo, pilotOne, pilotTwo, pilotUndo, pilotReset,
+            duration, green, yellow, red, vibration
         };
         String baseline = settingsSignature(settingsInputs);
 
@@ -440,7 +451,6 @@ public class MainActivity extends Activity {
             .setPositiveButton("Save settings", null)
             .create();
 
-        courtSettings.setOnClickListener(v -> leaveSettings(dialog, baseline, this::showCourtSettings, settingsInputs));
         dialog.setOnShowListener(x -> {
             if (dialog.getWindow() != null) {
                 dialog.getWindow().setBackgroundDrawable(new ColorDrawable(surface));
@@ -452,7 +462,8 @@ public class MainActivity extends Activity {
                 if (saveSettings(
                     profiles, profileOne, profileTwo, nameOne, nameTwo,
                     points, sets, darkBox, hcBox, colorOne, colorTwo,
-                    pilotOne, pilotTwo, pilotUndo, pilotReset
+                    pilotOne, pilotTwo, pilotUndo, pilotReset,
+                    duration, green, yellow, red, vibration
                 )) {
                     dialog.dismiss();
                 }
@@ -628,12 +639,36 @@ public class MainActivity extends Activity {
         Spinner pilotOne,
         Spinner pilotTwo,
         Spinner pilotUndo,
-        Spinner pilotReset
+        Spinner pilotReset,
+        EditText duration,
+        EditText green,
+        EditText yellow,
+        EditText red,
+        CheckBox vibration
     ) {
         try {
             int pts = Integer.parseInt(points.getText().toString().trim());
             int sts = Integer.parseInt(sets.getText().toString().trim());
             if (pts < 1 || sts < 1) throw new NumberFormatException();
+
+            int courtDuration, courtGreen, courtYellow, courtRed;
+            try {
+                courtDuration = Integer.parseInt(duration.getText().toString().trim());
+                courtGreen = Integer.parseInt(green.getText().toString().trim());
+                courtYellow = Integer.parseInt(yellow.getText().toString().trim());
+                courtRed = Integer.parseInt(red.getText().toString().trim());
+                if (courtDuration < 1 || courtDuration > 1440 || courtRed < 0
+                    || courtRed >= courtYellow || courtYellow >= courtGreen || courtGreen >= courtDuration) {
+                    throw new NumberFormatException();
+                }
+            } catch (NumberFormatException error) {
+                new AlertDialog.Builder(this)
+                    .setTitle("Invalid court timer values")
+                    .setMessage("The court timer values must follow 0 <= red < yellow < green < duration (maximum 1440 min). Enter whole numbers in min.")
+                    .setPositiveButton("Close dialog", null)
+                    .show();
+                return false;
+            }
 
             String nextProfileOneId = selectedProfileId(profiles, profileOne);
             String nextProfileTwoId = selectedProfileId(profiles, profileTwo);
@@ -681,6 +716,8 @@ public class MainActivity extends Activity {
                 remoteAt(pilotUndo.getSelectedItemPosition()),
                 remoteAt(pilotReset.getSelectedItemPosition())
             );
+            AppPreferences.saveCourtSettings(this, courtDuration, courtGreen, courtYellow, courtRed);
+            AppPreferences.saveCourtVibration(this, vibration.isChecked());
             loadStyle();
             setContentView(createContent());
             refreshScreen();
@@ -896,12 +933,12 @@ public class MainActivity extends Activity {
         int p1Sets = match.getPlayerOneSets();
         int p2Sets = match.getPlayerTwoSets();
 
-        playerOnePoints.setText((isBallFor(1) ? "● " : "") + p1Pts);
-        playerTwoPoints.setText((isBallFor(2) ? "● " : "") + p2Pts);
+        playerOnePoints.setText(String.valueOf(p1Pts));
+        playerTwoPoints.setText(String.valueOf(p2Pts));
         playerOneSets.setText("GAMES  " + p1Sets);
         playerTwoSets.setText("GAMES  " + p2Sets);
-        playerOneTitle.setText(UiTheme.playerSymbol(playerOneColor) + "  " + playerOneName);
-        playerTwoTitle.setText(UiTheme.playerSymbol(playerTwoColor) + "  " + playerTwoName);
+        playerOneTitle.setText(playerOneName);
+        playerTwoTitle.setText(playerTwoName);
 
         if (playerOnePanelView != null) {
             playerOnePanelView.setContentDescription(
@@ -942,6 +979,10 @@ public class MainActivity extends Activity {
         }
         updateCourtTimer();
         courtAlertView.bringToFront();
+        if (bottomNav != null) {
+            bottomNav.setPinned(paused && !match.isMatchFinished());
+            if (finishedOverlay == null) bottomNav.bringToFront();
+        }
     }
 
     private String formatDuration(long ms) {
@@ -1226,64 +1267,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void showCourtSettings() {
-        LinearLayout form = box(surface);
-        form.setPadding(dp(20), dp(12), dp(20), dp(12));
-        EditText duration = field(String.valueOf(AppPreferences.courtDuration(this)), InputType.TYPE_CLASS_NUMBER);
-        EditText green = field(String.valueOf(AppPreferences.courtGreen(this)), InputType.TYPE_CLASS_NUMBER);
-        EditText yellow = field(String.valueOf(AppPreferences.courtYellow(this)), InputType.TYPE_CLASS_NUMBER);
-        EditText red = field(String.valueOf(AppPreferences.courtRed(this)), InputType.TYPE_CLASS_NUMBER);
-        addSetting(form, "Rental duration (min)", duration);
-        addSetting(form, "Green warning (min before end)", green);
-        addSetting(form, "Yellow warning (min before end)", yellow);
-        addSetting(form, "Red warning (min before end)", red);
-
-        CheckBox vibration = checkBox("Vibrate at warnings (1, 2, and 3 pulses)", AppPreferences.courtVibration(this));
-        form.addView(vibration);
-
-        View[] courtInputs = {duration, green, yellow, red, vibration};
-        String baseline = settingsSignature(courtInputs);
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(form);
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("Court timer settings")
-            .setView(scroll)
-            .setNegativeButton("Cancel action", null)
-            .setPositiveButton("Save settings", null)
-            .create();
-
-        dialog.setOnShowListener(ignored -> {
-            if (dialog.getWindow() != null) {
-                dialog.getWindow().setBackgroundDrawable(new ColorDrawable(surface));
-            }
-            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(theme.primary);
-            Button saveBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
-            saveBtn.setTextColor(theme.primary);
-            saveBtn.setOnClickListener(v -> {
-                try {
-                    int d = Integer.parseInt(duration.getText().toString().trim());
-                    int g = Integer.parseInt(green.getText().toString().trim());
-                    int y = Integer.parseInt(yellow.getText().toString().trim());
-                    int r = Integer.parseInt(red.getText().toString().trim());
-                    if (d < 1 || d > 1440 || r < 0 || r >= y || y >= g || g >= d) throw new NumberFormatException();
-                    AppPreferences.saveCourtSettings(this, d, g, y, r);
-                    AppPreferences.saveCourtVibration(this, vibration.isChecked());
-                    updateCourtTimer();
-                    dialog.dismiss();
-                } catch (NumberFormatException error) {
-                    new AlertDialog.Builder(this)
-                        .setTitle("Invalid court timer values")
-                        .setMessage("The court timer values are not valid. The values must follow the order 0 <= red < yellow < green < duration (maximum 1440 min). Enter valid whole numbers in min.")
-                        .setPositiveButton("Close dialog", null)
-                        .show();
-                }
-            });
-            protectSettingsDialog(dialog, baseline, courtInputs);
-        });
-        dialog.show();
-    }
-
     private void updateBallBorder(int player) {
         GradientDrawable border = player == 1 ? playerOneBackground : playerTwoBackground;
         int rawColor = player == 1 ? playerOneColor : playerTwoColor;
@@ -1297,16 +1280,19 @@ public class MainActivity extends Activity {
         }
         if (UiTheme.isReduceMotionEnabled(this)) {
             stopBallPulse(player);
-            border.setStroke(dp(8), Color.WHITE);
+            border.setStroke(dp(12), rawColor);
             return;
         }
         if (pulse != null) return;
-        pulse = ValueAnimator.ofInt(dp(6), dp(14));
+        pulse = ValueAnimator.ofInt(40, 255);
         pulse.setDuration(750);
         pulse.setRepeatMode(ValueAnimator.REVERSE);
         pulse.setRepeatCount(ValueAnimator.INFINITE);
         pulse.setInterpolator(new AccelerateDecelerateInterpolator());
-        pulse.addUpdateListener(animation -> border.setStroke((Integer) animation.getAnimatedValue(), Color.WHITE));
+        pulse.addUpdateListener(animation -> {
+            int alpha = (Integer) animation.getAnimatedValue();
+            border.setStroke(dp(12), Color.argb(alpha, Color.red(rawColor), Color.green(rawColor), Color.blue(rawColor)));
+        });
         if (player == 1) playerOnePulse = pulse; else playerTwoPulse = pulse;
         pulse.start();
     }

@@ -1,6 +1,5 @@
 package pl.maciek.squashscoreboard;
 
-import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -22,10 +21,10 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
-import android.view.animation.DecelerateInterpolator;
 
 /**
  * Shared Material Design 3 tokens, WCAG 2.2 AA contrast colors, 8 dp spacing helpers,
@@ -330,82 +329,82 @@ public final class UiTheme {
         return new CollapsibleBottomNav(activity, activeTab, onOpenSettingsHere);
     }
 
-    public final class CollapsibleBottomNav extends LinearLayout {
+    public final class CollapsibleBottomNav extends FrameLayout {
         private static final long HIDE_DELAY_MS = 5000;
         private final Handler handler = new Handler(Looper.getMainLooper());
         private final Runnable hideTask = () -> setExpanded(false);
         private final Button toggle;
         private final View bar;
-        private ValueAnimator heightAnimator;
         private boolean expanded;
+        private boolean pinned;
 
         private CollapsibleBottomNav(Activity activity, int activeTab, Runnable onOpenSettingsHere) {
             super(activity);
-            setOrientation(VERTICAL);
-            setGravity(Gravity.CENTER_HORIZONTAL);
-            setClipChildren(true);
-
-            toggle = outlinedButton(activity, "⌃");
-            toggle.setTextSize(22);
-            toggle.setContentDescription("Show navigation menu");
-            toggle.setOnClickListener(v -> setExpanded(!expanded));
-            addView(toggle, new LinearLayout.LayoutParams(dp(activity, 72), dp(activity, 48)));
-
             bar = createBottomNavBar(activity, activeTab, onOpenSettingsHere);
             bar.setVisibility(GONE);
-            addView(bar, new LinearLayout.LayoutParams(-1, dp(activity, 56)));
+            addView(bar, new FrameLayout.LayoutParams(-1, dp(activity, 56), Gravity.BOTTOM));
+
+            toggle = new Button(activity);
+            toggle.setText("⌃");
+            toggle.setTextSize(18);
+            toggle.setTextColor(onSurface);
+            toggle.setAllCaps(false);
+            toggle.setPadding(0, 0, 0, 0);
+            toggle.setBackground(interactiveBackground(activity, surfaceHigh, 24, 1, outline));
+            toggle.setContentDescription("Show navigation menu");
+            toggle.setOnClickListener(v -> setExpanded(!expanded));
+            FrameLayout.LayoutParams toggleParams = new FrameLayout.LayoutParams(dp(activity, 48), dp(activity, 48), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            toggleParams.bottomMargin = dp(activity, 4);
+            addView(toggle, toggleParams);
         }
 
         public void onUserInteraction() {
-            if (expanded) scheduleHide();
+            if (expanded && !pinned) scheduleHide();
+        }
+
+        public void setPinned(boolean keepOpen) {
+            if (pinned == keepOpen) return;
+            pinned = keepOpen;
+            if (keepOpen) {
+                setExpanded(true);
+            } else if (expanded) {
+                scheduleHide();
+            }
         }
 
         private void scheduleHide() {
             handler.removeCallbacks(hideTask);
-            handler.postDelayed(hideTask, HIDE_DELAY_MS);
+            if (!pinned) handler.postDelayed(hideTask, HIDE_DELAY_MS);
         }
 
         private void setExpanded(boolean show) {
-            if (heightAnimator != null) heightAnimator.cancel();
+            bar.animate().cancel();
             expanded = show;
             toggle.setText(show ? "⌄" : "⌃");
             toggle.setContentDescription(show ? "Hide navigation menu" : "Show navigation menu");
             handler.removeCallbacks(hideTask);
             if (show) {
                 bar.setVisibility(VISIBLE);
-                scheduleHide();
-            }
-
-            int target = dp(getContext(), show ? 104 : 48);
-            if (isReduceMotionEnabled(getContext())) {
-                setHeight(target);
-                if (!show) bar.setVisibility(GONE);
-                return;
-            }
-            int start = getHeight() > 0 ? getHeight() : dp(getContext(), show ? 48 : 104);
-            heightAnimator = ValueAnimator.ofInt(start, target);
-            heightAnimator.setDuration(220);
-            heightAnimator.setInterpolator(new DecelerateInterpolator());
-            heightAnimator.addUpdateListener(animation -> setHeight((Integer) animation.getAnimatedValue()));
-            heightAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(android.animation.Animator animation) {
-                    if (!expanded) bar.setVisibility(GONE);
+                bar.setTranslationY(dp(getContext(), 56));
+                bar.setAlpha(0f);
+                if (isReduceMotionEnabled(getContext())) {
+                    bar.setTranslationY(0);
+                    bar.setAlpha(1f);
+                } else {
+                    bar.animate().translationY(0).alpha(1f).setDuration(220).start();
                 }
-            });
-            heightAnimator.start();
-        }
-
-        private void setHeight(int height) {
-            ViewGroup.LayoutParams params = getLayoutParams();
-            if (params != null) {
-                params.height = height;
-                setLayoutParams(params);
+                scheduleHide();
+            } else if (isReduceMotionEnabled(getContext())) {
+                bar.setVisibility(GONE);
+            } else {
+                bar.animate().translationY(dp(getContext(), 56)).alpha(0f).setDuration(220)
+                    .withEndAction(() -> { if (!expanded) bar.setVisibility(GONE); }).start();
             }
         }
 
         @Override protected void onDetachedFromWindow() {
             handler.removeCallbacks(hideTask);
-            if (heightAnimator != null) heightAnimator.cancel();
+            bar.animate().cancel();
             super.onDetachedFromWindow();
         }
     }
@@ -419,7 +418,6 @@ public final class UiTheme {
         bar.setPadding(dp(activity, 8), dp(activity, 6), dp(activity, 8), dp(activity, 6));
 
         String[] labels = {"Match", "History", "Players", "Settings"};
-        String[] icons = {"▣", "◷", "♟", "⚙"};
         String[] descriptions = {
             "Match, tab 1 of 4",
             "History, tab 2 of 4",
@@ -434,14 +432,14 @@ public final class UiTheme {
             item.setAllCaps(false);
             item.setSingleLine(true);
             item.setEllipsize(TextUtils.TruncateAt.END);
-            item.setText(icons[i] + "  " + labels[i]);
-            item.setTextSize(16);
+            item.setText(labels[i]);
+            item.setTextSize(14);
             item.setTypeface(selected ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
             item.setTextColor(selected ? onSecondaryContainer : onSurfaceVariant);
             item.setContentDescription(descriptions[i] + (selected ? ", selected" : ""));
             item.setMinHeight(dp(activity, 48));
             item.setMinimumHeight(dp(activity, 48));
-            item.setPadding(dp(activity, 8), 0, dp(activity, 8), 0);
+            item.setPadding(dp(activity, 2), 0, dp(activity, 2), 0);
             item.setBackground(interactiveBackground(
                 activity,
                 selected ? secondaryContainer : Color.TRANSPARENT,
@@ -481,8 +479,9 @@ public final class UiTheme {
             });
 
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(activity, 48), 1f);
-            lp.setMargins(dp(activity, 4), 0, dp(activity, 4), 0);
+            lp.setMargins(dp(activity, 2), 0, dp(activity, 2), 0);
             bar.addView(item, lp);
+            if (i == 1) bar.addView(new View(activity), new LinearLayout.LayoutParams(dp(activity, 48), dp(activity, 48)));
         }
         return bar;
     }
