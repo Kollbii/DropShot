@@ -8,6 +8,7 @@
         android:label="DropShot"
         android:roundIcon="@drawable/squash_logo"
         android:theme="@style/Theme.SquashScoreboard">
+        <activity android:name="pl.maciek.squashscoreboard.lootbox.LootboxActivity" android:configChanges="orientation|screenSize" />
         <activity android:name=".PlayerStatsActivity" android:configChanges="orientation|screenSize" />
         <activity android:name=".PlayerDetailActivity" android:configChanges="orientation|screenSize" />
         <activity android:name=".PlayerComparisonActivity" android:configChanges="orientation|screenSize" />

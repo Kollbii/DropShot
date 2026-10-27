@@ -25,6 +25,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
+import pl.maciek.squashscoreboard.lootbox.LootboxActivity;
 
 /**
  * Shared Material Design 3 tokens, WCAG 2.2 AA contrast colors, 8 dp spacing helpers,
@@ -35,6 +36,7 @@ public final class UiTheme {
     public static final int TAB_HISTORY = 1;
     public static final int TAB_PLAYERS = 2;
     public static final int TAB_SETTINGS = 3;
+    public static final int TAB_LOOTBOX = 4;
 
     public static final String EXTRA_OPEN_SETTINGS = "open_settings";
 
@@ -409,7 +411,7 @@ public final class UiTheme {
         }
     }
 
-    /** Creates the 4-item bottom navigation bar used inside the expandable menu. */
+    /** Creates the bottom navigation bar used inside the expandable menu. */
     public View createBottomNavBar(Activity activity, int activeTab, Runnable onOpenSettingsHere) {
         LinearLayout bar = new LinearLayout(activity);
         bar.setOrientation(LinearLayout.HORIZONTAL);
@@ -417,15 +419,16 @@ public final class UiTheme {
         bar.setBackgroundColor(surface);
         bar.setPadding(dp(activity, 8), dp(activity, 6), dp(activity, 8), dp(activity, 6));
 
-        String[] labels = {"Match", "History", "Players", "Settings"};
+        String[] labels = {"Match", "History", "Players", "Settings", "Lootbox"};
         String[] descriptions = {
-            "Match, tab 1 of 4",
-            "History, tab 2 of 4",
-            "Players, tab 3 of 4",
-            "Settings, tab 4 of 4"
+            "Match, tab 1 of 5",
+            "History, tab 2 of 5",
+            "Players, tab 3 of 5",
+            "Settings, tab 4 of 5",
+            "Lootbox, tab 5 of 5"
         };
 
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < labels.length; i++) {
             final int tab = i;
             boolean selected = (i == activeTab);
             Button item = new Button(activity);
@@ -465,6 +468,11 @@ public final class UiTheme {
                         activity.startActivity(new Intent(activity, PlayerStatsActivity.class));
                         if (!(activity instanceof MainActivity)) activity.finish();
                     }
+                } else if (tab == TAB_LOOTBOX) {
+                    if (!(activity instanceof LootboxActivity)) {
+                        activity.startActivity(new Intent(activity, LootboxActivity.class));
+                        if (!(activity instanceof MainActivity)) activity.finish();
+                    }
                 } else if (tab == TAB_SETTINGS) {
                     if (onOpenSettingsHere != null) {
                         onOpenSettingsHere.run();
@@ -481,7 +489,6 @@ public final class UiTheme {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(activity, 48), 1f);
             lp.setMargins(dp(activity, 2), 0, dp(activity, 2), 0);
             bar.addView(item, lp);
-            if (i == 1) bar.addView(new View(activity), new LinearLayout.LayoutParams(dp(activity, 48), dp(activity, 48)));
         }
         return bar;
     }

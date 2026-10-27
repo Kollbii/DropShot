@@ -2,6 +2,10 @@ plugins {
     id 'com.android.application'
 }
 
+dependencies {
+    implementation project(':lootbox')
+}
+
 android {
     namespace 'pl.maciek.squashscoreboard'
     compileSdk 35

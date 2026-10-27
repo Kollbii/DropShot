@@ -1,0 +1,16 @@
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    namespace 'pl.maciek.squashscoreboard.lootbox'
+    compileSdk 35
+
+    defaultConfig {
+        minSdk 26
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
