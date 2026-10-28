@@ -105,6 +105,9 @@ public final class CloudConfigStore {
         if (trimmed.isEmpty()) {
             throw new IllegalArgumentException("The player secret token is empty.");
         }
+        if (isValidTokenHash(trimmed)) {
+            return trimmed.toLowerCase(Locale.US);
+        }
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] bytes = digest.digest(trimmed.getBytes(StandardCharsets.UTF_8));

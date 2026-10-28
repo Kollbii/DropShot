@@ -99,9 +99,16 @@ public final class SecurityAndConcurrencyTest {
         String digest = CloudConfigStore.sha256Hex("player-secret-token");
         assertEquals(64, digest.length());
         assertTrue(CloudConfigStore.isValidTokenHash(digest));
-        // Deterministic SHA-256 output
+        // Deterministic SHA-256 output and pass-through normalization of existing 64-char hex hashes
         assertEquals(digest, CloudConfigStore.sha256Hex("  player-secret-token\n"));
+        assertEquals(digest, CloudConfigStore.sha256Hex(digest.toUpperCase()));
         assertNotEquals(digest, CloudConfigStore.sha256Hex("different-token"));
+
+        // Distinguish legacy JWT anon keys (eyJ...) from publishable keys (sb_publishable_...)
+        assertTrue(SupabaseSyncClient.isJwtKey("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.sig"));
+        assertFalse(SupabaseSyncClient.isJwtKey("sb_publishable_abc123def456"));
+        assertFalse(SupabaseSyncClient.isJwtKey(""));
+        assertFalse(SupabaseSyncClient.isJwtKey(null));
 
         // Reject invalid hashes
         assertFalse(CloudConfigStore.isValidTokenHash(null));

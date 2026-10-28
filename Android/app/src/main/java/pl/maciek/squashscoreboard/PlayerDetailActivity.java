@@ -195,12 +195,29 @@ public class PlayerDetailActivity extends Activity {
                         .show();
                     return;
                 }
-                if (!rawToken.isEmpty()) {
-                    CloudConfigStore.linkProfileToken(this, profile.id, rawToken);
-                }
-                SupabaseSyncClient.syncProfileInBackground(this, profile);
-                dialog.dismiss();
-                draw();
+                String tokenToUse = rawToken.isEmpty() ? existingHash : rawToken;
+                pushBtn.setEnabled(false);
+                pushBtn.setText("Uploading...");
+                SupabaseSyncClient.registerOrPushPlayerAsync(this, profile, tokenToUse, new SupabaseSyncClient.Callback<Void>() {
+                    @Override
+                    public void onSuccess(Void result) {
+                        if (isFinishing() || isDestroyed()) return;
+                        dialog.dismiss();
+                        draw();
+                    }
+
+                    @Override
+                    public void onError(String userMessage) {
+                        if (isFinishing() || isDestroyed()) return;
+                        pushBtn.setEnabled(true);
+                        pushBtn.setText("Upload to cloud");
+                        new AlertDialog.Builder(PlayerDetailActivity.this)
+                            .setTitle("Cannot upload player")
+                            .setMessage(userMessage)
+                            .setPositiveButton("Close dialog", null)
+                            .show();
+                    }
+                });
             });
         });
         dialog.show();

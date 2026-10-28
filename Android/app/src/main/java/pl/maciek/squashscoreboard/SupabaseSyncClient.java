@@ -69,8 +69,9 @@ public final class SupabaseSyncClient {
                 }
                 String tokenHash = CloudConfigStore.sha256Hex(rawSecretToken);
 
-                // 1. Fetch player row filtered by RLS on x-player-token-hash
-                String playersEndpoint = baseUrl + "/rest/v1/cloud_players?select=*&limit=1";
+                // 1. Fetch player row filtered by token_hash and RLS on x-player-token-hash
+                String playersEndpoint = baseUrl
+                    + "/rest/v1/cloud_players?token_hash=eq." + tokenHash + "&select=*&limit=1";
                 HttpResponse playerResp = executeRequest("GET", playersEndpoint, anonKey, tokenHash, null, null);
                 if (playerResp.statusCode < 200 || playerResp.statusCode >= 300) {
                     dispatchError(callback, formatHttpError("The app could not pull the player from the cloud.", playerResp.statusCode));
@@ -94,9 +95,10 @@ public final class SupabaseSyncClient {
                     cloudId = InputValidator.generateProfileUuid();
                 }
 
-                // 2. Fetch player's cloud match records
+                // 2. Fetch player's cloud match records filtered by player_id
                 String matchesEndpoint = baseUrl
-                    + "/rest/v1/cloud_player_matches?select=record_json&order=finished_at.desc&limit=100";
+                    + "/rest/v1/cloud_player_matches?player_id=eq." + cloudId
+                    + "&select=record_json&order=finished_at.desc&limit=100";
                 HttpResponse matchesResp = executeRequest("GET", matchesEndpoint, anonKey, tokenHash, null, null);
                 List<MatchRecord> cloudMatches = new ArrayList<>();
                 if (matchesResp.statusCode >= 200 && matchesResp.statusCode < 300 && !matchesResp.body.isEmpty()) {
@@ -205,16 +207,23 @@ public final class SupabaseSyncClient {
                     return;
                 }
                 String tokenHash = CloudConfigStore.sha256Hex(rawSecretToken);
-                CloudConfigStore.linkProfileTokenHash(appContext, profile.id, tokenHash);
 
-                boolean ok = pushPlayerStateSync(appContext, profile, tokenHash, null);
-                if (!ok) {
-                    dispatchError(
-                        callback,
-                        "The app could not upload the player to Supabase. Another player may already use this token, or RLS rejected the request. Check the secret token and try again."
-                    );
+                int status = pushPlayerStateSync(appContext, profile, tokenHash, null);
+                if (status < 200 || status >= 300) {
+                    if (status == 401 || status == 403) {
+                        dispatchError(
+                            callback,
+                            formatHttpError("The app could not upload the player to Supabase.", status)
+                        );
+                    } else {
+                        dispatchError(
+                            callback,
+                            "The app could not upload the player to Supabase (HTTP " + status + "). Another player may already use this token, or RLS rejected the request. Check the secret token and try again."
+                        );
+                    }
                     return;
                 }
+                CloudConfigStore.linkProfileTokenHash(appContext, profile.id, tokenHash);
                 AsyncRepositoryExecutor.runOnMain(() -> {
                     if (callback != null) callback.onSuccess(null);
                 });
@@ -285,7 +294,7 @@ public final class SupabaseSyncClient {
         }
     }
 
-    private static boolean pushPlayerStateSync(
+    private static int pushPlayerStateSync(
         Context appContext,
         PlayerProfile profile,
         String tokenHash,
@@ -294,18 +303,20 @@ public final class SupabaseSyncClient {
         String baseUrl = CloudConfigStore.getProjectUrl(appContext);
         String anonKey = CloudConfigStore.getAnonKey(appContext);
         if (!CloudConfigStore.isValidHttpsEndpoint(baseUrl) || anonKey.isEmpty()) {
-            return false;
+            return 0;
         }
 
         // 1. Check if cloud_players row already exists for this token_hash
-        String getEndpoint = baseUrl + "/rest/v1/cloud_players?select=id&limit=1";
+        String getEndpoint = baseUrl
+            + "/rest/v1/cloud_players?token_hash=eq." + tokenHash + "&select=id&limit=1";
         HttpResponse existingResp = executeRequest("GET", getEndpoint, anonKey, tokenHash, null, null);
+        if (existingResp.statusCode == 401 || existingResp.statusCode == 403) {
+            return existingResp.statusCode;
+        }
         String targetCloudPlayerId = profile.id;
-        boolean existsInCloud = false;
         if (existingResp.statusCode >= 200 && existingResp.statusCode < 300) {
             JSONArray arr = new JSONArray(existingResp.body);
             if (arr.length() > 0) {
-                existsInCloud = true;
                 String existingId = arr.getJSONObject(0).optString("id", profile.id);
                 if (InputValidator.isValidProfileId(existingId)) {
                     targetCloudPlayerId = existingId;
@@ -333,33 +344,18 @@ public final class SupabaseSyncClient {
         playerPayload.put("score_67", summary.score67);
         playerPayload.put("score_69", summary.score69);
 
-        HttpResponse upsertPlayerResp;
-        if (existsInCloud) {
-            String patchEndpoint = baseUrl + "/rest/v1/cloud_players?token_hash=eq." + tokenHash;
-            JSONObject updatePayload = new JSONObject(playerPayload.toString());
-            updatePayload.remove("id");
-            upsertPlayerResp = executeRequest(
-                "PATCH",
-                patchEndpoint,
-                anonKey,
-                tokenHash,
-                "return=minimal",
-                updatePayload.toString()
-            );
-        } else {
-            String postEndpoint = baseUrl + "/rest/v1/cloud_players?on_conflict=token_hash";
-            upsertPlayerResp = executeRequest(
-                "POST",
-                postEndpoint,
-                anonKey,
-                tokenHash,
-                "resolution=merge-duplicates,return=minimal",
-                playerPayload.toString()
-            );
-        }
+        String postEndpoint = baseUrl + "/rest/v1/cloud_players?on_conflict=token_hash";
+        HttpResponse upsertPlayerResp = executeRequest(
+            "POST",
+            postEndpoint,
+            anonKey,
+            tokenHash,
+            "resolution=merge-duplicates,return=minimal",
+            playerPayload.toString()
+        );
 
         if (upsertPlayerResp.statusCode < 200 || upsertPlayerResp.statusCode >= 300) {
-            return false;
+            return upsertPlayerResp.statusCode;
         }
 
         // 2. Upsert match record(s)
@@ -374,7 +370,7 @@ public final class SupabaseSyncClient {
                 }
             }
         }
-        return true;
+        return upsertPlayerResp.statusCode;
     }
 
     private static void upsertSingleMatch(
@@ -430,7 +426,9 @@ public final class SupabaseSyncClient {
             }
 
             conn.setRequestProperty("apikey", anonKey);
-            conn.setRequestProperty("Authorization", "Bearer " + anonKey);
+            if (isJwtKey(anonKey)) {
+                conn.setRequestProperty("Authorization", "Bearer " + anonKey);
+            }
             conn.setRequestProperty("x-player-token-hash", tokenHash);
             conn.setRequestProperty("Accept", "application/json");
 
@@ -456,6 +454,10 @@ public final class SupabaseSyncClient {
         } finally {
             conn.disconnect();
         }
+    }
+
+    static boolean isJwtKey(String key) {
+        return key != null && key.trim().startsWith("eyJ");
     }
 
     private static String readBoundedStream(InputStream in) throws IOException {
