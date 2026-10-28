@@ -18,6 +18,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import pl.maciek.squashscoreboard.lootbox.LootTier;
 import pl.maciek.squashscoreboard.lootbox.RewardCatalog;
 import pl.maciek.squashscoreboard.lootbox.RewardFonts;
 import pl.maciek.squashscoreboard.lootbox.RewardFrames;
@@ -144,6 +145,7 @@ public final class PlayerCustomizationActivity extends Activity {
     }
 
     private void showRewards(RewardCatalog.Reward[] rewards, String introText) {
+        RewardCatalog.Reward[] ordered = orderRewards(rewards);
         tiles.clear();
         ScrollView scroll = new ScrollView(this);
         LinearLayout content = new LinearLayout(this);
@@ -151,14 +153,14 @@ public final class PlayerCustomizationActivity extends Activity {
         TextView intro = label(introText, 15, theme.onSurfaceVariant);
         intro.setPadding(0, dp(4), 0, dp(10));
         content.addView(intro);
-        for (int start = 0; start < rewards.length; start += 3) {
+        for (int start = 0; start < ordered.length; start += 3) {
             LinearLayout row = new LinearLayout(this);
             for (int col = 0; col < 3; col++) {
                 LinearLayout cell = new LinearLayout(this);
                 cell.setOrientation(LinearLayout.VERTICAL);
                 cell.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-                if (start + col < rewards.length) {
-                    RewardCatalog.Reward reward = rewards[start + col];
+                if (start + col < ordered.length) {
+                    RewardCatalog.Reward reward = ordered[start + col];
                     RewardTile tile = new RewardTile(reward);
                     tiles.add(tile);
                     int tileSize = landscape ? 76 : 92;
@@ -180,6 +182,24 @@ public final class PlayerCustomizationActivity extends Activity {
         scroll.addView(content);
         page.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
         refreshSelection();
+    }
+
+    private RewardCatalog.Reward[] orderRewards(RewardCatalog.Reward[] rewards) {
+        boolean[] unlocked = new boolean[rewards.length];
+        for (int i = 0; i < rewards.length; i++)
+            unlocked[i] = RewardInventory.owns(this, profile.id, rewards[i]);
+        RewardCatalog.Reward[] ordered = new RewardCatalog.Reward[rewards.length];
+        int next = 0;
+        for (int group = 0; group < 2; group++) {
+            boolean unlockedGroup = group == 0;
+            for (LootTier tier : LootTier.values()) {
+                for (int i = 0; i < rewards.length; i++) {
+                    if (unlocked[i] == unlockedGroup && rewards[i].tier == tier)
+                        ordered[next++] = rewards[i];
+                }
+            }
+        }
+        return ordered;
     }
 
     private void showPlaceholder(String category) {
