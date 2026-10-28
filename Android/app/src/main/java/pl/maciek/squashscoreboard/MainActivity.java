@@ -175,9 +175,11 @@ public class MainActivity extends Activity {
             profile == null ? null : profile.frameId);
         View panel = host.getChildAt(0);
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) panel.getLayoutParams();
-        int inset = frame == null ? 0 : dp(20);
-        params.setMargins(inset, inset, inset, inset);
+        params.setMargins(0, 0, 0, 0);
         panel.setLayoutParams(params);
+        int horizontal = frame == null ? 16 : 30;
+        int vertical = frame == null ? 10 : 28;
+        panel.setPadding(dp(horizontal), dp(vertical), dp(horizontal), dp(vertical));
         host.setForeground(frame);
     }
 
