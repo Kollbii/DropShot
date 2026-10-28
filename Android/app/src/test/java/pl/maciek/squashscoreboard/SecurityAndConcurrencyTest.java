@@ -3,13 +3,9 @@ package pl.maciek.squashscoreboard;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import java.util.ArrayList;
-import java.util.List;
 import org.junit.Test;
-import pl.maciek.squashscoreboard.lootbox.RewardCatalog;
 
 /**
  * Automated verification suite for `:app`:
@@ -17,6 +13,7 @@ import pl.maciek.squashscoreboard.lootbox.RewardCatalog;
  * - Non-enumerable CSPRNG IDs
  * - Localhost bridge (`WatchCommandServer`) DNS rebinding & constant-time token verification
  * - Deterministic `MatchState` transitions and undo integrity
+ * - Supabase cloud endpoint validation and SHA-256 token hashing (`CloudConfigStore`)
  */
 public final class SecurityAndConcurrencyTest {
 
@@ -98,22 +95,24 @@ public final class SecurityAndConcurrencyTest {
     }
 
     @Test
-    public void seedsTemporaryInitialPlayersKacperAndLukaszWithRainbowColor() {
-        RewardCatalog.Reward rainbow = RewardCatalog.byId(ProfileStore.TEMP_DEFAULT_DROP_ID);
-        assertNotNull(rainbow);
-        List<PlayerProfile> profiles = new ArrayList<>();
+    public void hashesCloudTokensWithSha256AndValidatesHttpsEndpoints() {
+        String digest = CloudConfigStore.sha256Hex("player-secret-token");
+        assertEquals(64, digest.length());
+        assertTrue(CloudConfigStore.isValidTokenHash(digest));
+        // Deterministic SHA-256 output
+        assertEquals(digest, CloudConfigStore.sha256Hex("  player-secret-token\n"));
+        assertNotEquals(digest, CloudConfigStore.sha256Hex("different-token"));
 
-        boolean created = ProfileStore.seedTemporaryInitialPlayers(null, profiles);
-        assertTrue(created);
-        assertEquals(2, profiles.size());
-        assertEquals("Kacper", profiles.get(0).name);
-        assertEquals("Łukasz", profiles.get(1).name);
-        assertEquals(rainbow.key(), profiles.get(0).color);
-        assertEquals(rainbow.key(), profiles.get(1).color);
+        // Reject invalid hashes
+        assertFalse(CloudConfigStore.isValidTokenHash(null));
+        assertFalse(CloudConfigStore.isValidTokenHash("short"));
+        assertFalse(CloudConfigStore.isValidTokenHash("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"));
 
-        // Idempotent when called again on already-seeded list
-        assertFalse(ProfileStore.seedTemporaryInitialPlayers(null, profiles));
-        assertEquals(2, profiles.size());
+        // Validate HTTPS-only endpoints
+        assertTrue(CloudConfigStore.isValidHttpsEndpoint("https://example-project.supabase.co/"));
+        assertEquals("https://example-project.supabase.co", CloudConfigStore.normalizeHttpsEndpoint("https://example-project.supabase.co///"));
+        assertFalse(CloudConfigStore.isValidHttpsEndpoint("http://example-project.supabase.co"));
+        assertFalse(CloudConfigStore.isValidHttpsEndpoint("javascript:alert(1)"));
+        assertFalse(CloudConfigStore.isValidHttpsEndpoint(""));
     }
 }
-

@@ -81,8 +81,6 @@ public class MainActivity extends Activity {
     @Override
     public void onCreate(Bundle state) {
         super.onCreate(state);
-        // TEMPORARY: Trigger initial profile & default rainbow drop seeding for "Kacper" and "Łukasz" on startup.
-        ProfileStore.load(this);
         loadStyle();
         match.configure(AppPreferences.pointsPerSet(this), AppPreferences.setsPerMatch(this));
         courtStartMs = AppPreferences.courtStart(this);
@@ -871,6 +869,9 @@ public class MainActivity extends Activity {
         if (match.getPlayerOneSets() + match.getPlayerTwoSets() > oldSets) {
             setDurationsMs.add(currentSetElapsedMs);
             currentSetElapsedMs = 0;
+            if (!match.isMatchFinished()) {
+                archiveCurrentMatch();
+            }
         }
         if (match.isMatchFinished()) {
             pauseMatch();
@@ -1045,7 +1046,9 @@ public class MainActivity extends Activity {
 
     private void archiveCurrentMatch() {
         if (!match.hasPoints()) return;
-        MatchHistoryStore.add(this, buildCurrentRecord());
+        MatchRecord record = buildCurrentRecord();
+        MatchHistoryStore.add(this, record);
+        SupabaseSyncClient.syncMatchInBackground(this, record);
     }
 
     private void restoreMatchFromIntent(Intent intent) {

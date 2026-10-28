@@ -7,15 +7,7 @@ Severity: **High** = can lose data or allow unwanted changes. **Medium** = can c
 
 ## 1. Temporary code
 
-| # | Location | Description | Removal condition | Severity |
-|---|---|---|---|---|
-| T1 | `ProfileStore.TEMP_INITIAL_PLAYERS`, `seedTemporaryInitialPlayers`; `MainActivity.onCreate` (`ProfileStore.load`) | Creates "Kacper" and "Łukasz" with the rainbow color. Unlocks the rainbow reward for both. Runs at each cold start. | The user asks to remove it, or onboarding replaces it. | Medium |
-
-Effects of T1:
-
-1. If the user deletes "Kacper" or "Łukasz", the app creates the profile again at the next cold start. The new profile has a new ID. Old matches link by name only.
-2. The rainbow unlock bypasses the lootbox ticket flow.
-3. To remove T1: delete the 2 constants, `seedTemporaryInitialPlayers`, its call in `ensureLoaded`, the `ProfileStore.load` call in `MainActivity.onCreate`, and the unit test `seedsTemporaryInitialPlayersKacperAndLukaszWithRainbowColor`.
+There is no active temporary code.
 
 ## 2. Security
 

@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import pl.maciek.squashscoreboard.lootbox.RewardCatalog;
 import pl.maciek.squashscoreboard.lootbox.RewardInventory;
 import pl.maciek.squashscoreboard.lootbox.SecureStorageEngine;
 
@@ -22,12 +21,6 @@ import pl.maciek.squashscoreboard.lootbox.SecureStorageEngine;
 public final class ProfileStore {
     private static final String PREFS_FILE = "profiles";
     private static final String KEY_ITEMS = "items";
-
-    // TEMPORARY: Initial storage configuration that seeds two players ("Kacper" & "Łukasz")
-    // with the default "rainbow" ("Living Rainbow") color drop unlocked for both.
-    // Remove this temporary configuration once initial testing/onboarding seeding is no longer needed.
-    static final String[] TEMP_INITIAL_PLAYERS = {"Kacper", "Łukasz"};
-    static final String TEMP_DEFAULT_DROP_ID = "rainbow";
 
     private static final CopyOnWriteArrayList<PlayerProfile> CACHE = new CopyOnWriteArrayList<>();
     private static volatile boolean initialized;
@@ -91,6 +84,7 @@ public final class ProfileStore {
         }
         if (updated) {
             persistAsync(c, new ArrayList<>(CACHE));
+            SupabaseSyncClient.syncProfileInBackground(c, profile);
         }
     }
 
@@ -101,6 +95,7 @@ public final class ProfileStore {
         if (removed) {
             persistAsync(c, new ArrayList<>(CACHE));
             RewardInventory.forgetProfile(c, id);
+            CloudConfigStore.unlinkProfile(c, id);
         }
     }
 
@@ -134,11 +129,6 @@ public final class ProfileStore {
             for (PlayerProfile p : loaded) ids.add(p.id);
             RewardInventory.migrateLegacy(appContext, ids);
 
-            // TEMPORARY: Seed initial players "Kacper" and "Łukasz" and grant both the default "rainbow" drop.
-            if (seedTemporaryInitialPlayers(appContext, loaded)) {
-                migrate = true;
-            }
-
             CACHE.clear();
             CACHE.addAll(loaded);
             initialized = true;
@@ -147,34 +137,6 @@ public final class ProfileStore {
                 persistAsync(appContext, new ArrayList<>(CACHE));
             }
         }
-    }
-
-    /**
-     * TEMPORARY: Ensures "Kacper" and "Łukasz" exist in initial profile storage and unlocks
-     * the default "rainbow" ("Living Rainbow") reward drop for both players.
-     */
-    static boolean seedTemporaryInitialPlayers(Context appContext, List<PlayerProfile> profiles) {
-        RewardCatalog.Reward rainbow = RewardCatalog.byId(TEMP_DEFAULT_DROP_ID);
-        int defaultColor = rainbow != null ? rainbow.key() : AppPreferences.BLUE;
-        boolean modified = false;
-        for (String playerName : TEMP_INITIAL_PLAYERS) {
-            PlayerProfile target = null;
-            for (PlayerProfile existing : profiles) {
-                if (existing.name.equalsIgnoreCase(playerName)) {
-                    target = existing;
-                    break;
-                }
-            }
-            if (target == null) {
-                target = new PlayerProfile(playerName, defaultColor);
-                profiles.add(target);
-                modified = true;
-            }
-            if (rainbow != null && appContext != null) {
-                RewardInventory.unlock(appContext, target.id, rainbow);
-            }
-        }
-        return modified;
     }
 
     private static void persistAsync(Context c, List<PlayerProfile> snapshot) {
