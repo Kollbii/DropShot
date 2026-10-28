@@ -20,13 +20,14 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import pl.maciek.squashscoreboard.lootbox.RewardCatalog;
 import pl.maciek.squashscoreboard.lootbox.RewardFonts;
+import pl.maciek.squashscoreboard.lootbox.RewardFrames;
 import pl.maciek.squashscoreboard.lootbox.RewardInventory;
 import pl.maciek.squashscoreboard.lootbox.RewardTilePainter;
 
-/** Full-screen player cosmetics editor. Future cosmetic categories have reserved tabs. */
+/** Full-screen player cosmetics editor. Animation has a reserved tab. */
 public final class PlayerCustomizationActivity extends Activity {
     private PlayerProfile profile;
-    private RewardCatalog.Reward selected, selectedFont;
+    private RewardCatalog.Reward selected, selectedFont, selectedFrame;
     private UiTheme theme;
     private LinearLayout root, previewHost;
     private FrameLayout page;
@@ -45,6 +46,9 @@ public final class PlayerCustomizationActivity extends Activity {
         selectedFont = RewardCatalog.byId(profile.fontId);
         if (selectedFont == null || selectedFont.kind != RewardCatalog.Kind.FONT)
             selectedFont = RewardCatalog.fonts()[0];
+        selectedFrame = RewardCatalog.byId(profile.frameId);
+        if (selectedFrame == null || selectedFrame.kind != RewardCatalog.Kind.FRAME)
+            selectedFrame = RewardCatalog.frames()[0];
         buildScreen();
     }
 
@@ -122,6 +126,7 @@ public final class PlayerCustomizationActivity extends Activity {
 
         if (activeTab == 0) showColors();
         else if (activeTab == 1) showFonts();
+        else if (activeTab == 2) showFrames();
         else showPlaceholder(names[activeTab]);
         setContentView(root);
     }
@@ -132,6 +137,10 @@ public final class PlayerCustomizationActivity extends Activity {
 
     private void showFonts() {
         showRewards(RewardCatalog.fonts(), "Choose a font for the player name");
+    }
+
+    private void showFrames() {
+        showRewards(RewardCatalog.frames(), "Choose a frame for the player score panel");
     }
 
     private void showRewards(RewardCatalog.Reward[] rewards, String introText) {
@@ -185,6 +194,7 @@ public final class PlayerCustomizationActivity extends Activity {
 
     private void select(RewardCatalog.Reward reward) {
         if (reward.kind == RewardCatalog.Kind.FONT) selectedFont = reward;
+        else if (reward.kind == RewardCatalog.Kind.FRAME) selectedFrame = reward;
         else selected = reward;
         refreshSelection();
     }
@@ -192,17 +202,20 @@ public final class PlayerCustomizationActivity extends Activity {
     private void refreshSelection() {
         for (RewardTile tile : tiles) tile.invalidate();
         renderPreview();
-        RewardCatalog.Reward reward = activeTab == 1 ? selectedFont : selected;
+        RewardCatalog.Reward reward = activeTab == 1 ? selectedFont
+            : activeTab == 2 ? selectedFrame : selected;
         boolean owned = RewardInventory.owns(this, profile.id, reward);
         boolean equipped = activeTab == 1
             ? (profile.fontId == null ? "font-default" : profile.fontId).equals(reward.id)
+            : activeTab == 2 ? reward.id.equals(profile.frameId)
             : profile.color == reward.key();
         availability.setText(owned ? reward.name + " · " + reward.tier.label
             : reward.name + " · Locked — find it in a lootbox");
         actionButton.setVisibility(owned ? View.VISIBLE : View.GONE);
         actionButton.setEnabled(owned && !equipped);
-        actionButton.setText(equipped ? (activeTab == 1 ? "Font equipped" : "Color equipped")
-            : (activeTab == 1 ? "Set font" : "Set color"));
+        actionButton.setText(equipped ? (activeTab == 1 ? "Font equipped"
+            : activeTab == 2 ? "Frame equipped" : "Color equipped")
+            : (activeTab == 1 ? "Set font" : activeTab == 2 ? "Set frame" : "Set color"));
     }
 
     private void renderPreview() {
@@ -216,7 +229,7 @@ public final class PlayerCustomizationActivity extends Activity {
         panel.setGravity(Gravity.CENTER);
         panel.setPadding(dp(12), dp(7), dp(12), dp(7));
         GradientDrawable background = new GradientDrawable();
-        int previewColor = activeTab == 1 ? profile.color : selected.key();
+        int previewColor = activeTab == 0 ? selected.key() : profile.color;
         RewardCatalog.Reward colorReward = RewardCatalog.byKey(previewColor);
         background.setColor(theme.playerPanelFill(previewColor));
         background.setCornerRadius(dp(16));
@@ -224,6 +237,8 @@ public final class PlayerCustomizationActivity extends Activity {
         panel.setBackground(background);
         if (colorReward != null && colorReward.colors.length > 1)
             RewardCatalog.configure(panel, background, colorReward, true);
+        panel.setForeground(RewardFrames.forId(activeTab == 2
+            ? selectedFrame.id : profile.frameId));
         TextView name = previewText(profile.name, landscape ? 14 : 18, Color.WHITE);
         RewardFonts.apply(name,
             activeTab == 1 ? selectedFont : RewardCatalog.byId(profile.fontId),
@@ -247,12 +262,18 @@ public final class PlayerCustomizationActivity extends Activity {
     }
 
     private void equipSelected() {
-        RewardCatalog.Reward reward = activeTab == 1 ? selectedFont : selected;
+        RewardCatalog.Reward reward = activeTab == 1 ? selectedFont
+            : activeTab == 2 ? selectedFrame : selected;
         if (!RewardInventory.owns(this, profile.id, reward)) return;
-        profile = activeTab == 1
-            ? new PlayerProfile(profile.id, profile.name, profile.color,
-                "font-default".equals(reward.id) ? null : reward.id)
-            : new PlayerProfile(profile.id, profile.name, selected.key(), profile.fontId);
+        if (activeTab == 1)
+            profile = new PlayerProfile(profile.id, profile.name, profile.color,
+                "font-default".equals(reward.id) ? null : reward.id, profile.frameId);
+        else if (activeTab == 2)
+            profile = new PlayerProfile(profile.id, profile.name, profile.color,
+                profile.fontId, reward.id);
+        else
+            profile = new PlayerProfile(profile.id, profile.name, selected.key(),
+                profile.fontId, profile.frameId);
         ProfileStore.update(this, profile);
         refreshSelection();
     }
@@ -278,12 +299,13 @@ public final class PlayerCustomizationActivity extends Activity {
                     return;
                 }
                 String previous = profile.name;
-                profile = new PlayerProfile(profile.id, next, profile.color, profile.fontId);
+                profile = new PlayerProfile(profile.id, next, profile.color,
+                    profile.fontId, profile.frameId);
                 ProfileStore.update(this, profile);
                 MatchHistoryStore.renameProfile(this, profile.id, previous, next);
                 nickname.setText(next + "  ✎");
                 nickname.setContentDescription("Edit player name: " + next);
-                if (activeTab <= 1) renderPreview();
+                if (activeTab <= 2) renderPreview();
                 dialog.dismiss();
             }));
         dialog.show();
@@ -329,7 +351,7 @@ public final class PlayerCustomizationActivity extends Activity {
                 paint.setColor(0xFF30343B);
                 canvas.drawCircle(cx, cy + dp(7), dp(2), paint);
             }
-            if ((activeTab == 1 ? selectedFont : selected) == reward) {
+            if ((activeTab == 1 ? selectedFont : activeTab == 2 ? selectedFrame : selected) == reward) {
                 paint.setShader(null);
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setStrokeWidth(dp(4));

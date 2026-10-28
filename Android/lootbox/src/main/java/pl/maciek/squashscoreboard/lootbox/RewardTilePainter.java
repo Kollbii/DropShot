@@ -41,6 +41,20 @@ public final class RewardTilePainter {
             return;
         }
 
+        if (reward.kind == RewardCatalog.Kind.FRAME) {
+            paint.setColor(0xFF064B9B);
+            canvas.drawRoundRect(7, 24, 65, 63, 5, 5, paint);
+            RewardFrames.drawPreview(canvas, 7, 24, 58, 39, reward);
+            paint.setColor(0xFFFFFFFF);
+            paint.setTypeface(Typeface.DEFAULT_BOLD);
+            paint.setTextSize(18);
+            canvas.drawText("11", 36, 51, paint);
+            paint.setTypeface(null);
+            paint.setTextAlign(Paint.Align.LEFT);
+            canvas.restoreToCount(save);
+            return;
+        }
+
         Path flow = new Path();
         flow.moveTo(40, 35);
         flow.cubicTo(47, 37, 43, 45, 51, 48);

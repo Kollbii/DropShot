@@ -10,7 +10,7 @@ import java.util.Random;
 
 /** Single, versioned reward database. Edit ENTRIES to add, remove or retier cosmetics. */
 public final class RewardCatalog {
-    public enum Kind { COLOR, FONT }
+    public enum Kind { COLOR, FONT, FRAME }
     public static final class Reward {
         public final String id, name;
         public final LootTier tier;
@@ -39,9 +39,19 @@ public final class RewardCatalog {
             this.fontFile = fontFile;
         }
 
+        private Reward(String id, String name, LootTier tier) {
+            this.id = id;
+            this.name = name;
+            this.tier = tier;
+            this.kind = Kind.FRAME;
+            this.colors = new int[0];
+            this.animated = false;
+            this.fontFile = null;
+        }
+
         /** Persisted player color key; the first gradient stop is deliberately unique. */
         public int key() {
-            if (kind != Kind.COLOR) throw new IllegalStateException("Font has no color key: " + id);
+            if (kind != Kind.COLOR) throw new IllegalStateException("Reward has no color key: " + id);
             return colors[0];
         }
     }
@@ -54,6 +64,9 @@ public final class RewardCatalog {
     }
     private static Reward font(String id, String name, LootTier tier, String file) {
         return new Reward(id, name, tier, file);
+    }
+    private static Reward frame(String id, String name, LootTier tier) {
+        return new Reward(id, name, tier);
     }
 
     private static final Reward DEFAULT_FONT = font("font-default", "Default", LootTier.GRAY, null);
@@ -100,7 +113,22 @@ public final class RewardCatalog {
         font("font-pirata-one", "Pirata One", LootTier.GREEN, "pirataone.ttf"),
         font("font-new-rocker", "New Rocker", LootTier.GREEN, "newrocker.ttf"),
         font("font-black-ops-one", "Black Ops One", LootTier.GREEN, "blackopsone.ttf"),
-        font("font-eagle-lake", "Eagle Lake", LootTier.GREEN, "eaglelake.ttf")
+        font("font-eagle-lake", "Eagle Lake", LootTier.GREEN, "eaglelake.ttf"),
+        frame("frame-photon-blade", "Photon Blade", LootTier.PURPLE),
+        frame("frame-tribal-fang", "Tribal Fang", LootTier.PURPLE),
+        frame("frame-barbed-wire", "Barbed Wire", LootTier.GREEN),
+        frame("frame-forged-steel", "Forged Steel", LootTier.GREEN),
+        frame("frame-neon-circuit", "Neon Circuit", LootTier.PURPLE),
+        frame("frame-arcane-runes", "Arcane Runes", LootTier.PURPLE),
+        frame("frame-thorn-vine", "Thorn Vine", LootTier.GREEN),
+        frame("frame-pixel-glitch", "Pixel Glitch", LootTier.GREEN),
+        frame("frame-racing-stripes", "Racing Stripes", LootTier.GREEN),
+        frame("frame-royal-filigree", "Royal Filigree", LootTier.PURPLE),
+        frame("frame-liquid-chrome", "Liquid Chrome", LootTier.GREEN),
+        frame("frame-inferno", "Inferno", LootTier.GREEN),
+        frame("frame-frost-crystal", "Frost Crystal", LootTier.GREEN),
+        frame("frame-carbon-hex", "Carbon Hex", LootTier.GREEN),
+        frame("frame-shattered-glass", "Shattered Glass", LootTier.GREEN)
     };
 
     private RewardCatalog() {}
@@ -111,6 +139,8 @@ public final class RewardCatalog {
 
     /** Includes the free built-in font, which cannot be drawn from a lootbox. */
     public static Reward[] fonts() { return byKind(Kind.FONT, true); }
+
+    public static Reward[] frames() { return byKind(Kind.FRAME, false); }
 
     private static Reward[] byKind(Kind kind, boolean includeDefault) {
         List<Reward> result = new ArrayList<>();

@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Locale;
 import pl.maciek.squashscoreboard.lootbox.RewardCatalog;
 import pl.maciek.squashscoreboard.lootbox.RewardFonts;
+import pl.maciek.squashscoreboard.lootbox.RewardFrames;
 
 public class MainActivity extends Activity {
     private UiTheme theme;
@@ -159,6 +160,10 @@ public class MainActivity extends Activity {
         }
         applyPlayerFont(playerOneTitle, one);
         applyPlayerFont(playerTwoTitle, two);
+        if (playerOnePanelView != null)
+            playerOnePanelView.setForeground(RewardFrames.forId(one == null ? null : one.frameId));
+        if (playerTwoPanelView != null)
+            playerTwoPanelView.setForeground(RewardFrames.forId(two == null ? null : two.frameId));
     }
 
     private void applyPlayerFont(TextView title, PlayerProfile profile) {
@@ -317,7 +322,10 @@ public class MainActivity extends Activity {
 
         String nameText = player == 1 ? playerOneName : playerTwoName;
         TextView title = text(nameText, 24, Color.WHITE);
-        applyPlayerFont(title, ProfileStore.find(this, player == 1 ? playerOneProfileId : playerTwoProfileId));
+        PlayerProfile profile = ProfileStore.find(this,
+            player == 1 ? playerOneProfileId : playerTwoProfileId);
+        applyPlayerFont(title, profile);
+        panel.setForeground(RewardFrames.forId(profile == null ? null : profile.frameId));
         title.setGravity(Gravity.CENTER);
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);

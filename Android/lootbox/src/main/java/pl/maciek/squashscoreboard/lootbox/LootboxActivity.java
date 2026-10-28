@@ -273,7 +273,7 @@ public final class LootboxActivity extends Activity {
         heading.setGravity(Gravity.CENTER);
         rewardCard.addView(heading, new LinearLayout.LayoutParams(-1, dp(36)));
         View square;
-        if (lastReward.kind == RewardCatalog.Kind.FONT) {
+        if (lastReward.kind != RewardCatalog.Kind.COLOR) {
             RewardCatalog.Reward fontReward = lastReward;
             square = new View(this) {
                 private final Paint tilePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -298,7 +298,8 @@ public final class LootboxActivity extends Activity {
         name.setGravity(Gravity.CENTER);
         rewardCard.addView(name, new LinearLayout.LayoutParams(-1, dp(38)));
         TextView status = label(rewardAlreadyOwned ? "Already in your collection"
-            : "New player " + (lastReward.kind == RewardCatalog.Kind.FONT ? "font" : "color") + " unlocked",
+            : "New player " + (lastReward.kind == RewardCatalog.Kind.FONT ? "font"
+                : lastReward.kind == RewardCatalog.Kind.FRAME ? "frame" : "color") + " unlocked",
             14, MUTED);
         status.setGravity(Gravity.CENTER);
         rewardCard.addView(status, new LinearLayout.LayoutParams(-1, dp(26)));
