@@ -24,7 +24,8 @@ public final class RewardInventory {
     public static RewardCatalog.Reward[] available(Context context, String profileId) {
         List<RewardCatalog.Reward> result = new ArrayList<>();
         for (RewardCatalog.Reward reward : RewardCatalog.all()) {
-            if (owns(context, profileId, reward)) result.add(reward);
+            if (reward.kind == RewardCatalog.Kind.COLOR && owns(context, profileId, reward))
+                result.add(reward);
         }
         return result.toArray(new RewardCatalog.Reward[0]);
     }
@@ -63,7 +64,7 @@ public final class RewardInventory {
     }
 
     private static boolean isStarter(String id) {
-        return "blue".equals(id) || "red".equals(id)
+        return "font-default".equals(id) || "blue".equals(id) || "red".equals(id)
             || "green".equals(id) || "gold".equals(id);
     }
 

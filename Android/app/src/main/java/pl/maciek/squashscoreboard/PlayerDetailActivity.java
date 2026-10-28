@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.res.Configuration;
-import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.widget.Button;
@@ -13,6 +12,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import java.util.Locale;
 import pl.maciek.squashscoreboard.lootbox.RewardInventory;
+import pl.maciek.squashscoreboard.lootbox.RewardFonts;
 
 public class PlayerDetailActivity extends Activity {
     private PlayerProfile profile;
@@ -58,7 +58,7 @@ public class PlayerDetailActivity extends Activity {
         back.setOnClickListener(v -> finish());
 
         TextView title = t(profile.name, 24, accent);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTypeface(RewardFonts.forId(this, profile.fontId));
         title.setPadding(dp(16), 0, dp(16), 0);
 
         Button edit = theme.tonalButton(this, "Edit player");

@@ -28,6 +28,17 @@ public final class RewardTilePainter {
         paint.setTextSize(10);
         canvas.drawText(reward.tier.label.toUpperCase(), 36, 12, paint);
 
+        if (reward.kind == RewardCatalog.Kind.FONT) {
+            paint.setColor(0xFF18202B);
+            paint.setTypeface(RewardFonts.forReward(host.getContext(), reward));
+            paint.setTextSize(38);
+            canvas.drawText("Aa", 36, 55, paint);
+            paint.setTypeface(null);
+            paint.setTextAlign(Paint.Align.LEFT);
+            canvas.restoreToCount(save);
+            return;
+        }
+
         Path flow = new Path();
         flow.moveTo(40, 35);
         flow.cubicTo(47, 37, 43, 45, 51, 48);

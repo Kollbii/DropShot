@@ -21,17 +21,18 @@ import android.widget.TextView;
 import pl.maciek.squashscoreboard.lootbox.RewardCatalog;
 import pl.maciek.squashscoreboard.lootbox.RewardInventory;
 import pl.maciek.squashscoreboard.lootbox.RewardTilePainter;
+import pl.maciek.squashscoreboard.lootbox.RewardFonts;
 
 /** Full-screen player cosmetics editor. Future cosmetic categories have reserved tabs. */
 public final class PlayerCustomizationActivity extends Activity {
     private PlayerProfile profile;
-    private RewardCatalog.Reward selected;
+    private RewardCatalog.Reward selected, selectedFont;
     private UiTheme theme;
     private LinearLayout root, previewHost;
     private FrameLayout page;
     private TextView nickname, availability;
-    private Button setColor;
-    private final java.util.List<ColorTile> tiles = new java.util.ArrayList<>();
+    private Button actionButton;
+    private final java.util.List<RewardTile> tiles = new java.util.ArrayList<>();
     private int activeTab;
     private boolean landscape;
 
@@ -40,7 +41,10 @@ public final class PlayerCustomizationActivity extends Activity {
         profile = ProfileStore.find(this, getIntent().getStringExtra("profile"));
         if (profile == null) { finish(); return; }
         selected = RewardCatalog.byKey(profile.color);
-        if (selected == null) selected = RewardCatalog.all()[0];
+        if (selected == null) selected = RewardCatalog.colors()[0];
+        selectedFont = RewardCatalog.byId(profile.fontId);
+        if (selectedFont == null || selectedFont.kind != RewardCatalog.Kind.FONT)
+            selectedFont = RewardCatalog.fonts()[0];
         buildScreen();
     }
 
@@ -112,25 +116,32 @@ public final class PlayerCustomizationActivity extends Activity {
         availability = label("", 14, theme.onSurfaceVariant);
         availability.setGravity(Gravity.CENTER);
         side.addView(availability, new LinearLayout.LayoutParams(-1, dp(28)));
-        setColor = theme.primaryButton(this, "Set color");
-        setColor.setOnClickListener(v -> equipSelected());
-        side.addView(setColor, new LinearLayout.LayoutParams(-1, dp(48)));
+        actionButton = theme.primaryButton(this, "Set color");
+        actionButton.setOnClickListener(v -> equipSelected());
+        side.addView(actionButton, new LinearLayout.LayoutParams(-1, dp(48)));
 
         if (activeTab == 0) showColors();
+        else if (activeTab == 1) showFonts();
         else showPlaceholder(names[activeTab]);
         setContentView(root);
     }
 
     private void showColors() {
+        showRewards(RewardCatalog.colors(), "Choose a color · win locked colors in lootboxes");
+    }
+
+    private void showFonts() {
+        showRewards(RewardCatalog.fonts(), "Choose a font for the player name");
+    }
+
+    private void showRewards(RewardCatalog.Reward[] rewards, String introText) {
         tiles.clear();
         ScrollView scroll = new ScrollView(this);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        TextView intro = label("Choose a color · win locked colors in lootboxes", 15,
-            theme.onSurfaceVariant);
+        TextView intro = label(introText, 15, theme.onSurfaceVariant);
         intro.setPadding(0, dp(4), 0, dp(10));
         content.addView(intro);
-        RewardCatalog.Reward[] rewards = RewardCatalog.all();
         for (int start = 0; start < rewards.length; start += 3) {
             LinearLayout row = new LinearLayout(this);
             for (int col = 0; col < 3; col++) {
@@ -139,7 +150,7 @@ public final class PlayerCustomizationActivity extends Activity {
                 cell.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL);
                 if (start + col < rewards.length) {
                     RewardCatalog.Reward reward = rewards[start + col];
-                    ColorTile tile = new ColorTile(reward);
+                    RewardTile tile = new RewardTile(reward);
                     tiles.add(tile);
                     int tileSize = landscape ? 76 : 92;
                     cell.addView(tile, new LinearLayout.LayoutParams(dp(tileSize), dp(tileSize)));
@@ -169,23 +180,29 @@ public final class PlayerCustomizationActivity extends Activity {
         page.addView(message, new FrameLayout.LayoutParams(-1, -1));
         previewHost.setVisibility(View.GONE);
         availability.setVisibility(View.GONE);
-        setColor.setVisibility(View.GONE);
+        actionButton.setVisibility(View.GONE);
     }
 
     private void select(RewardCatalog.Reward reward) {
-        selected = reward;
+        if (reward.kind == RewardCatalog.Kind.FONT) selectedFont = reward;
+        else selected = reward;
         refreshSelection();
     }
 
     private void refreshSelection() {
-        for (ColorTile tile : tiles) tile.invalidate();
+        for (RewardTile tile : tiles) tile.invalidate();
         renderPreview();
-        boolean owned = RewardInventory.owns(this, profile.id, selected);
-        availability.setText(owned ? selected.name + " · " + selected.tier.label
-            : selected.name + " · Locked — find it in a lootbox");
-        setColor.setVisibility(owned ? View.VISIBLE : View.GONE);
-        setColor.setEnabled(owned && profile.color != selected.key());
-        setColor.setText(profile.color == selected.key() ? "Color equipped" : "Set color");
+        RewardCatalog.Reward reward = activeTab == 1 ? selectedFont : selected;
+        boolean owned = RewardInventory.owns(this, profile.id, reward);
+        boolean equipped = activeTab == 1
+            ? (profile.fontId == null ? "font-default" : profile.fontId).equals(reward.id)
+            : profile.color == reward.key();
+        availability.setText(owned ? reward.name + " · " + reward.tier.label
+            : reward.name + " · Locked — find it in a lootbox");
+        actionButton.setVisibility(owned ? View.VISIBLE : View.GONE);
+        actionButton.setEnabled(owned && !equipped);
+        actionButton.setText(equipped ? (activeTab == 1 ? "Font equipped" : "Color equipped")
+            : (activeTab == 1 ? "Set font" : "Set color"));
     }
 
     private void renderPreview() {
@@ -199,13 +216,17 @@ public final class PlayerCustomizationActivity extends Activity {
         panel.setGravity(Gravity.CENTER);
         panel.setPadding(dp(12), dp(7), dp(12), dp(7));
         GradientDrawable background = new GradientDrawable();
-        background.setColor(theme.playerPanelFill(selected.key()));
+        int previewColor = activeTab == 1 ? profile.color : selected.key();
+        RewardCatalog.Reward colorReward = RewardCatalog.byKey(previewColor);
+        background.setColor(theme.playerPanelFill(previewColor));
         background.setCornerRadius(dp(16));
-        background.setStroke(dp(3), theme.playerAccentOnSurface(selected.key()));
+        background.setStroke(dp(3), theme.playerAccentOnSurface(previewColor));
         panel.setBackground(background);
-        if (selected.colors.length > 1)
-            RewardCatalog.configure(panel, background, selected, true);
+        if (colorReward != null && colorReward.colors.length > 1)
+            RewardCatalog.configure(panel, background, colorReward, true);
         TextView name = previewText(profile.name, landscape ? 14 : 18, Color.WHITE);
+        name.setTypeface(RewardFonts.forReward(this,
+            activeTab == 1 ? selectedFont : RewardCatalog.byId(profile.fontId)));
         TextView games = previewText("GAMES  0", landscape ? 12 : 16, 0xFFF4F0E9);
         TextView points = previewText("0", landscape ? 32 : 55, Color.WHITE);
         TextView hint = previewText("TAP PANEL TO ADD 1 POINT", landscape ? 8 : 10, 0xFFF4F0E9);
@@ -225,8 +246,12 @@ public final class PlayerCustomizationActivity extends Activity {
     }
 
     private void equipSelected() {
-        if (!RewardInventory.owns(this, profile.id, selected)) return;
-        profile = new PlayerProfile(profile.id, profile.name, selected.key());
+        RewardCatalog.Reward reward = activeTab == 1 ? selectedFont : selected;
+        if (!RewardInventory.owns(this, profile.id, reward)) return;
+        profile = activeTab == 1
+            ? new PlayerProfile(profile.id, profile.name, profile.color,
+                "font-default".equals(reward.id) ? null : reward.id)
+            : new PlayerProfile(profile.id, profile.name, selected.key(), profile.fontId);
         ProfileStore.update(this, profile);
         refreshSelection();
     }
@@ -252,12 +277,12 @@ public final class PlayerCustomizationActivity extends Activity {
                     return;
                 }
                 String previous = profile.name;
-                profile = new PlayerProfile(profile.id, next, profile.color);
+                profile = new PlayerProfile(profile.id, next, profile.color, profile.fontId);
                 ProfileStore.update(this, profile);
                 MatchHistoryStore.renameProfile(this, profile.id, previous, next);
                 nickname.setText(next + "  ✎");
                 nickname.setContentDescription("Edit player name: " + next);
-                if (activeTab == 0) renderPreview();
+                if (activeTab <= 1) renderPreview();
                 dialog.dismiss();
             }));
         dialog.show();
@@ -275,11 +300,11 @@ public final class PlayerCustomizationActivity extends Activity {
         return (int) (value * getResources().getDisplayMetrics().density + .5f);
     }
 
-    private final class ColorTile extends View {
+    private final class RewardTile extends View {
         private final RewardCatalog.Reward reward;
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-        ColorTile(RewardCatalog.Reward reward) { super(PlayerCustomizationActivity.this); this.reward = reward; }
+        RewardTile(RewardCatalog.Reward reward) { super(PlayerCustomizationActivity.this); this.reward = reward; }
 
         @Override protected void onDraw(Canvas canvas) {
             float size = Math.min(getWidth(), getHeight()) - dp(8);
@@ -303,7 +328,7 @@ public final class PlayerCustomizationActivity extends Activity {
                 paint.setColor(0xFF30343B);
                 canvas.drawCircle(cx, cy + dp(7), dp(2), paint);
             }
-            if (selected == reward) {
+            if ((activeTab == 1 ? selectedFont : selected) == reward) {
                 paint.setShader(null);
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setStrokeWidth(dp(4));
