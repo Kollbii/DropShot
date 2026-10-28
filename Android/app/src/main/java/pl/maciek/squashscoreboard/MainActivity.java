@@ -57,7 +57,7 @@ public class MainActivity extends Activity {
     private final ArrayList<Long> setDurationsMs = new ArrayList<>();
     private final ArrayList<Long> pointTimesMs = new ArrayList<>();
     private TextView playerOnePoints, playerTwoPoints, playerOneSets, playerTwoSets, status, playerOneTitle, playerTwoTitle;
-    private LinearLayout playerOnePanelView, playerTwoPanelView;
+    private FrameLayout playerOnePanelView, playerTwoPanelView;
     private Button pauseButton, undoButton;
     private TextView pauseOverlay;
     private MediaSession mediaSession;
@@ -160,15 +160,25 @@ public class MainActivity extends Activity {
         }
         applyPlayerFont(playerOneTitle, one);
         applyPlayerFont(playerTwoTitle, two);
-        if (playerOnePanelView != null)
-            playerOnePanelView.setForeground(RewardFrames.forId(one == null ? null : one.frameId));
-        if (playerTwoPanelView != null)
-            playerTwoPanelView.setForeground(RewardFrames.forId(two == null ? null : two.frameId));
+        applyPlayerFrame(playerOnePanelView, one);
+        applyPlayerFrame(playerTwoPanelView, two);
     }
 
     private void applyPlayerFont(TextView title, PlayerProfile profile) {
         if (title != null) RewardFonts.apply(title,
             profile == null ? null : profile.fontId, 24f);
+    }
+
+    private void applyPlayerFrame(FrameLayout host, PlayerProfile profile) {
+        if (host == null) return;
+        android.graphics.drawable.Drawable frame = RewardFrames.forId(
+            profile == null ? null : profile.frameId);
+        View panel = host.getChildAt(0);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) panel.getLayoutParams();
+        int inset = frame == null ? 0 : dp(20);
+        params.setMargins(inset, inset, inset, inset);
+        panel.setLayoutParams(params);
+        host.setForeground(frame);
     }
 
     @Override
@@ -314,8 +324,9 @@ public class MainActivity extends Activity {
         RewardCatalog.Reward cosmetic = RewardCatalog.byKey(rawColor);
         if (cosmetic != null && cosmetic.colors.length > 1)
             RewardCatalog.configure(panel, bg, cosmetic, true);
-        panel.setOnClickListener(v -> addPoint(player));
-        panel.setOnLongClickListener(v -> {
+        FrameLayout frameHost = new FrameLayout(this);
+        frameHost.setOnClickListener(v -> addPoint(player));
+        frameHost.setOnLongClickListener(v -> {
             showSettings();
             return true;
         });
@@ -325,7 +336,6 @@ public class MainActivity extends Activity {
         PlayerProfile profile = ProfileStore.find(this,
             player == 1 ? playerOneProfileId : playerTwoProfileId);
         applyPlayerFont(title, profile);
-        panel.setForeground(RewardFrames.forId(profile == null ? null : profile.frameId));
         title.setGravity(Gravity.CENTER);
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
@@ -348,21 +358,23 @@ public class MainActivity extends Activity {
         panel.addView(sets, new LinearLayout.LayoutParams(-1, dp(38)));
         panel.addView(points, new LinearLayout.LayoutParams(-1, 0, 1));
         panel.addView(hint, new LinearLayout.LayoutParams(-1, dp(26)));
+        frameHost.addView(panel, new FrameLayout.LayoutParams(-1, -1));
+        applyPlayerFrame(frameHost, profile);
 
         if (player == 1) {
             playerOnePoints = points;
             playerOneSets = sets;
             playerOneTitle = title;
             playerOneBackground = bg;
-            playerOnePanelView = panel;
+            playerOnePanelView = frameHost;
         } else {
             playerTwoPoints = points;
             playerTwoSets = sets;
             playerTwoTitle = title;
             playerTwoBackground = bg;
-            playerTwoPanelView = panel;
+            playerTwoPanelView = frameHost;
         }
-        return panel;
+        return frameHost;
     }
 
     private void showSettings() {

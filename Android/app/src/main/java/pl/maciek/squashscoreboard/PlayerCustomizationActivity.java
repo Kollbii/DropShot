@@ -257,8 +257,8 @@ public final class PlayerCustomizationActivity extends Activity {
         panel.setBackground(background);
         if (colorReward != null && colorReward.colors.length > 1)
             RewardCatalog.configure(panel, background, colorReward, true);
-        panel.setForeground(RewardFrames.forId(activeTab == 2
-            ? selectedFrame.id : profile.frameId));
+        android.graphics.drawable.Drawable frame = RewardFrames.forId(activeTab == 2
+            ? selectedFrame.id : profile.frameId);
         TextView name = previewText(profile.name, landscape ? 14 : 18, Color.WHITE);
         RewardFonts.apply(name,
             activeTab == 1 ? selectedFont : RewardCatalog.byId(profile.fontId),
@@ -270,7 +270,16 @@ public final class PlayerCustomizationActivity extends Activity {
         panel.addView(games);
         panel.addView(points);
         panel.addView(hint);
-        previewHost.addView(panel, new LinearLayout.LayoutParams(-1, dp(landscape ? 110 : 170)));
+        FrameLayout frameHost = new FrameLayout(this);
+        int inset = frame == null ? 0 : dp(landscape ? 12 : 20);
+        FrameLayout.LayoutParams panelParams = new FrameLayout.LayoutParams(-1, -1);
+        panelParams.setMargins(inset, inset, inset, inset);
+        frameHost.addView(panel, panelParams);
+        frameHost.setForeground(frame);
+        int previewHeight = landscape ? (frame == null ? 110 : 130)
+            : (frame == null ? 170 : 205);
+        previewHost.addView(frameHost,
+            new LinearLayout.LayoutParams(-1, dp(previewHeight)));
     }
 
     private TextView previewText(String text, int size, int color) {
