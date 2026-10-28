@@ -293,8 +293,8 @@ public final class LootboxActivity extends Activity {
         rewardCard.addView(square, squareParams);
         TextView name = label(lastReward.name.toUpperCase() + " · " + lastResult.label.toUpperCase(),
             landscape ? 18 : 21, lastResult.color);
-        name.setTypeface(lastReward.kind == RewardCatalog.Kind.FONT
-            ? RewardFonts.forReward(this, lastReward) : android.graphics.Typeface.DEFAULT_BOLD);
+        if (lastReward.kind == RewardCatalog.Kind.FONT)
+            RewardFonts.apply(name, lastReward, landscape ? 18f : 21f);
         name.setGravity(Gravity.CENTER);
         rewardCard.addView(name, new LinearLayout.LayoutParams(-1, dp(38)));
         TextView status = label(rewardAlreadyOwned ? "Already in your collection"

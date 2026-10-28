@@ -162,8 +162,8 @@ public class MainActivity extends Activity {
     }
 
     private void applyPlayerFont(TextView title, PlayerProfile profile) {
-        if (title != null) title.setTypeface(RewardFonts.forId(this,
-            profile == null ? null : profile.fontId));
+        if (title != null) RewardFonts.apply(title,
+            profile == null ? null : profile.fontId, 24f);
     }
 
     @Override

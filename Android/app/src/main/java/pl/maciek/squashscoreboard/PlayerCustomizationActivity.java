@@ -10,18 +10,18 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.FrameLayout;
-import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import pl.maciek.squashscoreboard.lootbox.RewardCatalog;
+import pl.maciek.squashscoreboard.lootbox.RewardFonts;
 import pl.maciek.squashscoreboard.lootbox.RewardInventory;
 import pl.maciek.squashscoreboard.lootbox.RewardTilePainter;
-import pl.maciek.squashscoreboard.lootbox.RewardFonts;
 
 /** Full-screen player cosmetics editor. Future cosmetic categories have reserved tabs. */
 public final class PlayerCustomizationActivity extends Activity {
@@ -74,26 +74,26 @@ public final class PlayerCustomizationActivity extends Activity {
         header.addView(nickname, new LinearLayout.LayoutParams(0, dp(52), 1));
         root.addView(header);
 
-        HorizontalScrollView tabScroll = new HorizontalScrollView(this);
-        tabScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout tabs = new LinearLayout(this);
+        tabs.setGravity(Gravity.CENTER_VERTICAL);
         String[] names = {"Color", "Font", "Frame", "Animation"};
         for (int i = 0; i < names.length; i++) {
             final int index = i;
             Button tab = i == activeTab ? theme.tonalButton(this, names[i])
                 : theme.outlinedButton(this, names[i]);
             tab.setAllCaps(false);
-            tab.setTextSize(13);
+            tab.setTextSize(12);
             tab.setMinWidth(0);
             tab.setMinimumWidth(0);
-            tab.setPadding(dp(7), 0, dp(7), 0);
+            tab.setPadding(dp(4), 0, dp(4), 0);
+            tab.setSingleLine(true);
+            tab.setEllipsize(TextUtils.TruncateAt.END);
             tab.setOnClickListener(v -> { activeTab = index; buildScreen(); });
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(44));
-            params.setMargins(0, dp(8), dp(8), dp(8));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1);
+            params.setMargins(dp(2), dp(8), dp(2), dp(8));
             tabs.addView(tab, params);
         }
-        tabScroll.addView(tabs);
-        root.addView(tabScroll, new LinearLayout.LayoutParams(-1, dp(60)));
+        root.addView(tabs, new LinearLayout.LayoutParams(-1, dp(60)));
 
         landscape = getResources().getConfiguration().orientation
             == Configuration.ORIENTATION_LANDSCAPE;
@@ -225,8 +225,9 @@ public final class PlayerCustomizationActivity extends Activity {
         if (colorReward != null && colorReward.colors.length > 1)
             RewardCatalog.configure(panel, background, colorReward, true);
         TextView name = previewText(profile.name, landscape ? 14 : 18, Color.WHITE);
-        name.setTypeface(RewardFonts.forReward(this,
-            activeTab == 1 ? selectedFont : RewardCatalog.byId(profile.fontId)));
+        RewardFonts.apply(name,
+            activeTab == 1 ? selectedFont : RewardCatalog.byId(profile.fontId),
+            landscape ? 14f : 18f);
         TextView games = previewText("GAMES  0", landscape ? 12 : 16, 0xFFF4F0E9);
         TextView points = previewText("0", landscape ? 32 : 55, Color.WHITE);
         TextView hint = previewText("TAP PANEL TO ADD 1 POINT", landscape ? 8 : 10, 0xFFF4F0E9);

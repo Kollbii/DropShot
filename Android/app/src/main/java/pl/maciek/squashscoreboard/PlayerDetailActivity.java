@@ -58,7 +58,7 @@ public class PlayerDetailActivity extends Activity {
         back.setOnClickListener(v -> finish());
 
         TextView title = t(profile.name, 24, accent);
-        title.setTypeface(RewardFonts.forId(this, profile.fontId));
+        RewardFonts.apply(title, profile.fontId, 24f);
         title.setPadding(dp(16), 0, dp(16), 0);
 
         Button edit = theme.tonalButton(this, "Edit player");

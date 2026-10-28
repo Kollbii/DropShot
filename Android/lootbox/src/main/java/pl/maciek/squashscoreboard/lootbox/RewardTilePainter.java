@@ -31,7 +31,9 @@ public final class RewardTilePainter {
         if (reward.kind == RewardCatalog.Kind.FONT) {
             paint.setColor(0xFF18202B);
             paint.setTypeface(RewardFonts.forReward(host.getContext(), reward));
-            paint.setTextSize(38);
+            paint.setTextSize(38 * RewardFonts.sizeScale(host.getContext(), reward));
+            if (paint.measureText("Aa") > 56f)
+                paint.setTextSize(paint.getTextSize() * 56f / paint.measureText("Aa"));
             canvas.drawText("Aa", 36, 55, paint);
             paint.setTypeface(null);
             paint.setTextAlign(Paint.Align.LEFT);
