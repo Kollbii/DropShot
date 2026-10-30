@@ -121,7 +121,8 @@ public final class SupabaseSyncClient {
                 PlayerProfile resolvedProfile;
                 if (existingById != null) {
                     String oldName = existingById.name;
-                    resolvedProfile = new PlayerProfile(cloudId, cloudName, cloudColor);
+                    resolvedProfile = new PlayerProfile(cloudId, cloudName, cloudColor,
+                        existingById.fontId, existingById.frameId);
                     ProfileStore.update(appContext, resolvedProfile);
                     if (!oldName.equals(cloudName)) {
                         MatchHistoryStore.renameProfile(appContext, cloudId, oldName, cloudName);
@@ -129,7 +130,8 @@ public final class SupabaseSyncClient {
                 } else if (existingByName != null) {
                     // Replace local profile ID with cloud profile ID so future matches link cleanly
                     List<PlayerProfile> current = new ArrayList<>(ProfileStore.load(appContext));
-                    resolvedProfile = new PlayerProfile(cloudId, cloudName, cloudColor);
+                    resolvedProfile = new PlayerProfile(cloudId, cloudName, cloudColor,
+                        existingByName.fontId, existingByName.frameId);
                     for (int i = 0; i < current.size(); i++) {
                         if (current.get(i).id.equals(existingByName.id)) {
                             current.set(i, resolvedProfile);

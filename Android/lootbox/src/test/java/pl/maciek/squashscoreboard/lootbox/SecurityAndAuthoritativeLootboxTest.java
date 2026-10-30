@@ -81,7 +81,7 @@ public final class SecurityAndAuthoritativeLootboxTest {
     }
 
     @Test
-    public void developerBackdoorIsNeutralized() {
+    public void developerLookupRequiresContext() {
         assertNull(RewardInventory.developerId(null));
         assertFalse(RewardInventory.isDeveloper(null, "developer-profile"));
         assertFalse(RewardInventory.isDeveloper(null, "deweloper"));
