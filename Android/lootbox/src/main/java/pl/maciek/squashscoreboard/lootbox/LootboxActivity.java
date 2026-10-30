@@ -21,9 +21,15 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import java.util.Random;
 
-/** Self-contained placeholder lootbox screen; the host app only needs an entry point. */
+/**
+ * [MASVS-CRYPTO] [MASVS-PLATFORM] [ASVS V4.1 / V4.2] [PERF-120HZ]
+ * Hardened lootbox screen:
+ * - Delegates all RNG and entitlement redemption to `LootboxAuthoritativeService` (CSPRNG + signed tickets).
+ * - Validates incoming `EXTRA_PROFILE_ID` and `EXTRA_PLAYER_NAME` intent parameters.
+ * - Enables `filterTouchesWhenObscured(true)` on interactive buttons against tapjacking.
+ * - Pre-allocates `Path` objects in `BallView` to eliminate per-frame GC allocations at 120Hz.
+ */
 public final class LootboxActivity extends Activity {
     public static final String EXTRA_PROFILE_ID = "reward_profile_id";
     public static final String EXTRA_PLAYER_NAME = "reward_player_name";
@@ -33,8 +39,7 @@ public final class LootboxActivity extends Activity {
     private static final int ACCENT = 0xFFE6AD54;
     private static final int IDLE = 0, SHAKING = 1, CRACKING = 2, POPPING = 3, SPINNING = 4, WON = 5;
 
-    private final TierRoller roller = new TierRoller();
-    private final Random visualRandom = new Random();
+    private final LootboxAuthoritativeService authoritativeService = new LootboxAuthoritativeService();
     private final RewardCatalog.Reward[] reelStrip = new RewardCatalog.Reward[50];
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable revealTask = this::showReward;
@@ -48,6 +53,7 @@ public final class LootboxActivity extends Activity {
     private TextView resultLabel;
     private LootTier lastResult;
     private RewardCatalog.Reward lastReward;
+    private LootboxAuthoritativeService.SpinOutcome activeSpin;
     private int phase = IDLE;
     private float shakeProgress, crackProgress, popProgress, reelProgress;
     private float landingFraction;
@@ -56,12 +62,26 @@ public final class LootboxActivity extends Activity {
     private boolean rewardDismissed;
     private boolean rewardAlreadyOwned;
     private String profileId;
+    private String playerName;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        profileId = getIntent().getStringExtra(EXTRA_PROFILE_ID);
-        if (profileId == null) { finish(); return; }
+        String rawProfileId = getIntent() != null ? getIntent().getStringExtra(EXTRA_PROFILE_ID) : null;
+        if (!LootboxAuthoritativeService.isValidProfileId(rawProfileId)) {
+            finish();
+            return;
+        }
+        profileId = rawProfileId;
+        String rawName = getIntent().getStringExtra(EXTRA_PLAYER_NAME);
+        playerName = sanitizeDisplayName(rawName);
         buildScreen();
+    }
+
+    private static String sanitizeDisplayName(String raw) {
+        if (raw == null) return "player";
+        String cleaned = raw.replaceAll("[\\p{Cntrl}\\u202A-\\u202E\\u2066-\\u2069]", "").trim();
+        if (cleaned.isEmpty()) return "player";
+        return cleaned.length() > 32 ? cleaned.substring(0, 32) : cleaned;
     }
 
     @Override public void onConfigurationChanged(Configuration config) {
@@ -85,6 +105,7 @@ public final class LootboxActivity extends Activity {
         back.setAllCaps(false);
         back.setTextColor(FOREGROUND);
         back.setBackgroundColor(0xFF303642);
+        back.setFilterTouchesWhenObscured(true);
         back.setOnClickListener(v -> finish());
         header.addView(back, new LinearLayout.LayoutParams(dp(landscape ? 92 : 100), dp(44)));
         TextView title = label("SQUASH LOOTBOX", landscape ? 22 : 24, FOREGROUND);
@@ -98,8 +119,7 @@ public final class LootboxActivity extends Activity {
 
         if (!landscape) {
             content.addView(title, new LinearLayout.LayoutParams(-1, dp(40)));
-            String playerName = getIntent().getStringExtra(EXTRA_PLAYER_NAME);
-            TextView subtitle = label("Rewards for " + (playerName == null ? "player" : playerName), 16, MUTED);
+            TextView subtitle = label("Rewards for " + playerName, 16, MUTED);
             subtitle.setGravity(Gravity.CENTER);
             content.addView(subtitle, new LinearLayout.LayoutParams(-1, dp(32)));
         }
@@ -126,6 +146,7 @@ public final class LootboxActivity extends Activity {
         openButton.setTypeface(null, 1);
         openButton.setTextColor(BACKGROUND);
         openButton.setBackgroundColor(ACCENT);
+        openButton.setFilterTouchesWhenObscured(true);
         openButton.setOnClickListener(v -> open());
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
             dp(landscape ? 250 : 220), dp(48));
@@ -180,20 +201,21 @@ public final class LootboxActivity extends Activity {
         if (phaseAnimator != null) phaseAnimator.cancel();
         phase = SHAKING;
         rewardDismissed = false;
-        lastResult = roller.roll();
-        lastReward = RewardCatalog.pick(lastResult, visualRandom);
+
+        activeSpin = authoritativeService.initiateSpin(profileId, reelStrip.length, ReelView.TARGET);
+        lastResult = activeSpin.tier;
+        lastReward = activeSpin.reward;
         rewardAlreadyOwned = RewardInventory.owns(this, profileId, lastReward);
-        for (int i = 0; i < reelStrip.length; i++)
-            reelStrip[i] = RewardCatalog.pick(roller.roll(), visualRandom);
-        reelStrip[ReelView.TARGET] = lastReward;
-        landingFraction = ReelLanding.pickOffsetFraction(visualRandom);
-        reelStartIndex = 10 + visualRandom.nextInt(6);
+        System.arraycopy(activeSpin.reelStrip, 0, reelStrip, 0, reelStrip.length);
+        landingFraction = activeSpin.landingFraction;
+        reelStartIndex = activeSpin.startIndex;
+
         shakeProgress = crackProgress = popProgress = reelProgress = 0f;
         renderState();
         if (reduceMotion()) {
             crackProgress = popProgress = reelProgress = 1f;
             phase = WON;
-            RewardInventory.unlock(this, profileId, lastReward);
+            redeemCurrentSpin();
             renderState();
             return;
         }
@@ -201,6 +223,13 @@ public final class LootboxActivity extends Activity {
             shakeProgress = value;
             ball.setShake(value);
         }, this::crackBall);
+    }
+
+    private void redeemCurrentSpin() {
+        if (activeSpin == null) return;
+        LootboxAuthoritativeService.SpinOutcome spin = activeSpin;
+        activeSpin = null;
+        authoritativeService.redeemSpin(this, profileId, spin.ticketId, spin.signature);
     }
 
     private void crackBall() {
@@ -248,7 +277,7 @@ public final class LootboxActivity extends Activity {
         if (phase != SPINNING) return;
         phase = WON;
         rewardDismissed = false;
-        RewardInventory.unlock(this, profileId, lastReward);
+        redeemCurrentSpin();
         reelProgress = 1f;
         resultLabel.setText("You got: " + lastReward.name + " · " + lastResult.label);
         resultLabel.setTextColor(lastResult.color);
@@ -308,6 +337,7 @@ public final class LootboxActivity extends Activity {
         continueButton.setAllCaps(false);
         continueButton.setTextColor(BACKGROUND);
         continueButton.setBackgroundColor(ACCENT);
+        continueButton.setFilterTouchesWhenObscured(true);
         continueButton.setOnClickListener(v -> resetToReady());
         LinearLayout.LayoutParams continueParams = new LinearLayout.LayoutParams(-1, dp(44));
         continueParams.topMargin = dp(8);
@@ -320,6 +350,7 @@ public final class LootboxActivity extends Activity {
         rewardOverlay.setVisibility(View.GONE);
         lastResult = null;
         lastReward = null;
+        activeSpin = null;
         phase = IDLE;
         shakeProgress = crackProgress = popProgress = reelProgress = 0f;
         rewardDismissed = true;
@@ -379,6 +410,10 @@ public final class LootboxActivity extends Activity {
 
     private final class BallView extends View {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        // [PERF-120HZ] Pre-allocated reusable Path objects to avoid GC churn inside onDraw()
+        private final Path leftHalf = new Path();
+        private final Path rightHalf = new Path();
+        private final Path seamPath = new Path();
         private float crack;
 
         BallView() { super(LootboxActivity.this); }
@@ -395,14 +430,15 @@ public final class LootboxActivity extends Activity {
             float cx = getWidth() / 2f, cy = getHeight() / 2f;
             float radius = Math.min(getWidth(), getHeight()) * .39f;
             float split = Math.max(0, (crack - .6f) / .4f) * radius * .38f;
-            Path leftHalf = new Path();
+            leftHalf.reset();
             leftHalf.moveTo(0, 0);
             leftHalf.lineTo(cx, 0);
             addSeam(leftHalf, cx, cy, radius);
             leftHalf.lineTo(cx, getHeight());
             leftHalf.lineTo(0, getHeight());
             leftHalf.close();
-            Path rightHalf = new Path();
+
+            rightHalf.reset();
             rightHalf.moveTo(getWidth(), 0);
             rightHalf.lineTo(cx, 0);
             addSeam(rightHalf, cx, cy, radius);
@@ -425,13 +461,13 @@ public final class LootboxActivity extends Activity {
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setStrokeWidth(dp(3));
                 paint.setColor(0xFFFFE4B2);
-                Path path = new Path();
-                path.moveTo(cx, 0);
-                addSeam(path, cx, cy, radius);
+                seamPath.reset();
+                seamPath.moveTo(cx, 0);
+                addSeam(seamPath, cx, cy, radius);
                 canvas.save();
                 canvas.clipRect(cx - radius, cy - radius, cx + radius,
                     cy - radius + 2 * radius * (crack / .6f));
-                canvas.drawPath(path, paint);
+                canvas.drawPath(seamPath, paint);
                 canvas.restore();
             }
         }
@@ -463,7 +499,7 @@ public final class LootboxActivity extends Activity {
     }
 
     private final class ReelView extends View {
-        private static final int TARGET = 42;
+        static final int TARGET = 42;
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RewardCatalog.Reward[] strip = new RewardCatalog.Reward[50];
         private float progress;
@@ -506,7 +542,5 @@ public final class LootboxActivity extends Activity {
             canvas.drawRect(center - dp(2), top + size + dp(3), center + dp(2), getHeight(), paint);
             canvas.restoreToCount(save);
         }
-
-
     }
 }

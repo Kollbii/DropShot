@@ -15,7 +15,10 @@ import java.util.Locale;
 public final class SetProgressChartView extends View {
     public interface OnSetFocusChanged { void onSetFocusChanged(int setNumber); }
     private final MatchRecord record;
+    private final ArrayList<int[]> cachedSets;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path firstPath = new Path();
+    private final Path secondPath = new Path();
     private final DashPathEffect dashEffect;
     private final UiTheme theme;
     private final ScaleGestureDetector scaleDetector;
@@ -28,6 +31,7 @@ public final class SetProgressChartView extends View {
     public SetProgressChartView(Context context, MatchRecord record) {
         super(context);
         this.record = record;
+        this.cachedSets = split();
         this.theme = new UiTheme(context);
         this.dashEffect = new DashPathEffect(new float[]{dp(10), dp(6)}, 0);
         setContentDescription("Game progress chart for " + record.playerOneName + " versus " + record.playerTwoName + ".");
@@ -61,7 +65,7 @@ public final class SetProgressChartView extends View {
         super.onDraw(canvas);
         float left = dp(42), top = dp(36), right = getWidth() - dp(16), bottom = getHeight() - dp(50);
         if (right <= left || bottom <= top) return;
-        ArrayList<int[]> sets = split();
+        ArrayList<int[]> sets = cachedSets;
         int visibleCount = focusedSet < 0 ? sets.size() : 1;
         float setWidth = (right - left) * zoom / Math.max(1, visibleCount);
         boolean recorded = hasRecordedTimes();
@@ -89,17 +93,18 @@ public final class SetProgressChartView extends View {
             paint.setPathEffect(null);
             canvas.drawRect(x0, top, x1, bottom, paint);
 
-            Path first = new Path(), second = new Path();
-            first.moveTo(x0, bottom);
-            second.moveTo(x0, bottom);
+            firstPath.reset();
+            secondPath.reset();
+            firstPath.moveTo(x0, bottom);
+            secondPath.moveTo(x0, bottom);
             int one = 0, two = 0;
             for (int i = segment[0]; i < segment[1]; i++) {
                 int winner = record.pointWinners.get(i);
                 if (winner == 1) one++; else two++;
                 float x = x0 + (x1 - x0) * (pointTime(i) - start) / (float) span;
                 float y1 = bottom - (bottom - top) * one / max, y2 = bottom - (bottom - top) * two / max;
-                first.lineTo(x, y1);
-                second.lineTo(x, y2);
+                firstPath.lineTo(x, y1);
+                secondPath.lineTo(x, y2);
                 if (zoom > 1.5f || segment[1] - segment[0] < 30) {
                     paint.setStyle(Paint.Style.FILL);
                     paint.setColor(winner == 1 ? c1 : c2);
@@ -116,11 +121,11 @@ public final class SetProgressChartView extends View {
             paint.setStrokeWidth(dp(3));
             paint.setPathEffect(null);
             paint.setColor(c1);
-            canvas.drawPath(first, paint);
+            canvas.drawPath(firstPath, paint);
 
             paint.setPathEffect(dashEffect);
             paint.setColor(c2);
-            canvas.drawPath(second, paint);
+            canvas.drawPath(secondPath, paint);
             paint.setPathEffect(null);
 
             paint.setStyle(Paint.Style.FILL);
@@ -218,7 +223,7 @@ public final class SetProgressChartView extends View {
     }
 
     private void selectNearest(float x) {
-        ArrayList<int[]> sets = split();
+        ArrayList<int[]> sets = cachedSets;
         if (sets.isEmpty()) return;
         float left = dp(42), width = Math.max(1, getWidth() - dp(58));
         if (x < left || x > getWidth() - dp(16)) return;

@@ -94,7 +94,7 @@ public class MainActivity extends Activity {
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
         );
         setContentView(createContent());
-        currentMatchId = System.currentTimeMillis();
+        currentMatchId = InputValidator.generateSecureMatchId();
         startClock();
         restoreMatchFromIntent(getIntent());
         createMediaSession();
@@ -753,7 +753,7 @@ public class MainActivity extends Activity {
                 archiveCurrentMatch();
                 match.configure(pts, sts);
                 resetClock();
-                currentMatchId = System.currentTimeMillis();
+                currentMatchId = InputValidator.generateSecureMatchId();
             }
 
             AppPreferences.save(
@@ -899,6 +899,9 @@ public class MainActivity extends Activity {
         if (match.getPlayerOneSets() + match.getPlayerTwoSets() > oldSets) {
             setDurationsMs.add(currentSetElapsedMs);
             currentSetElapsedMs = 0;
+            if (!match.isMatchFinished()) {
+                archiveCurrentMatch();
+            }
         }
         if (match.isMatchFinished()) {
             pauseMatch();
@@ -1073,7 +1076,9 @@ public class MainActivity extends Activity {
 
     private void archiveCurrentMatch() {
         if (!match.hasPoints()) return;
-        MatchHistoryStore.add(this, buildCurrentRecord());
+        MatchRecord record = buildCurrentRecord();
+        MatchHistoryStore.add(this, record);
+        SupabaseSyncClient.syncMatchInBackground(this, record);
     }
 
     private void restoreMatchFromIntent(Intent intent) {
@@ -1365,7 +1370,7 @@ public class MainActivity extends Activity {
             () -> {
                 finishedOverlay = null;
                 match.reset();
-                currentMatchId = System.currentTimeMillis();
+                currentMatchId = InputValidator.generateSecureMatchId();
                 resetClock();
                 refreshScreen();
             },
@@ -1412,7 +1417,7 @@ public class MainActivity extends Activity {
         pauseMatch();
         archiveCurrentMatch();
         match.reset();
-        currentMatchId = System.currentTimeMillis();
+        currentMatchId = InputValidator.generateSecureMatchId();
         resetClock();
         refreshScreen();
     }
@@ -1442,6 +1447,7 @@ public class MainActivity extends Activity {
         b.setMinimumHeight(dp(48));
         b.setPadding(dp(10), 0, dp(10), 0);
         b.setBackground(theme.interactiveBackground(this, color, 12, 1, theme.outlineVariant));
+        b.setFilterTouchesWhenObscured(true);
         return b;
     }
 

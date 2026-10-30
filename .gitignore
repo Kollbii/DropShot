@@ -6,6 +6,7 @@
 build/
 local.properties
 *.iml
+*.apk
 .idea/
 captures/
 .cxx/

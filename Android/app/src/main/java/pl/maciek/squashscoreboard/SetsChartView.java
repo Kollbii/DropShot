@@ -8,12 +8,14 @@ import java.util.ArrayList;
 
 public final class SetsChartView extends View {
     private final MatchRecord r;
+    private final ArrayList<int[]> cachedSets;
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final UiTheme theme;
 
     public SetsChartView(Context c, MatchRecord x) {
         super(c);
         r = x;
+        cachedSets = all();
         theme = new UiTheme(c);
         setContentDescription("Game scores bar chart for " + r.playerOneName + " versus " + r.playerTwoName + ".");
     }
@@ -22,7 +24,7 @@ public final class SetsChartView extends View {
     protected void onDraw(Canvas c) {
         float l = dp(42), t = dp(38), rr = getWidth() - dp(16), b = getHeight() - dp(48);
         if (rr <= l || b <= t) return;
-        ArrayList<int[]> sets = all();
+        ArrayList<int[]> sets = cachedSets;
         int max = 1;
         for (int[] s : sets) max = Math.max(max, Math.max(s[0], s[1]));
         float step = (rr - l) / Math.max(1, sets.size());

@@ -66,14 +66,19 @@ public class PlayerStatsActivity extends Activity {
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setPadding(dp(16), 0, dp(16), 0);
 
+        Button cloudBtn = theme.outlinedButton(this, "Set up cloud");
+        cloudBtn.setContentDescription("Set up Supabase cloud connection.");
+        cloudBtn.setOnClickListener(v -> showCloudSettingsDialog(null));
+
         Button compare = theme.tonalButton(this, "Compare players");
         compare.setOnClickListener(v -> chooseComparison(profiles));
 
         Button add = theme.primaryButton(this, "Add player");
-        add.setOnClickListener(v -> addProfile());
+        add.setOnClickListener(v -> chooseAddPlayerMode());
 
         header.addView(back, new LinearLayout.LayoutParams(-2, dp(48)));
         header.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        header.addView(cloudBtn, btnMargin());
         header.addView(compare, btnMargin());
         header.addView(add, btnMargin());
         root.addView(header, new LinearLayout.LayoutParams(-1, dp(52)));
@@ -92,7 +97,7 @@ public class PlayerStatsActivity extends Activity {
             emptyTitle.setGravity(Gravity.CENTER);
 
             TextView emptyDesc = text(
-                "Add a player profile to track career statistics and compare players.",
+                "Add a local player or pull a cloud player with a secret token to track career statistics.",
                 16,
                 theme.onSurfaceVariant
             );
@@ -100,15 +105,18 @@ public class PlayerStatsActivity extends Activity {
             emptyDesc.setPadding(0, dp(8), 0, dp(16));
 
             Button emptyAdd = theme.primaryButton(this, "Add player");
-            emptyAdd.setOnClickListener(v -> addProfile());
+            emptyAdd.setOnClickListener(v -> chooseAddPlayerMode());
 
             emptyBox.addView(emptyTitle);
             emptyBox.addView(emptyDesc);
             emptyBox.addView(emptyAdd, new LinearLayout.LayoutParams(-2, dp(48)));
             list.addView(emptyBox, new LinearLayout.LayoutParams(-1, -2));
         } else {
+            // [PERF-120HZ] Single-pass batch calculation across all profiles (eliminates O(P * M) repeated JSON loads)
+            java.util.Map<String, PlayerStatistics.Summary> summaries = PlayerStatistics.calculateAll(this, profiles);
             for (PlayerProfile p : profiles) {
-                list.addView(profileRow(p), rowParams());
+                PlayerStatistics.Summary summary = summaries.get(p.id);
+                list.addView(profileRow(p, summary != null ? summary : new PlayerStatistics.Summary()), rowParams());
             }
         }
 
@@ -133,18 +141,18 @@ public class PlayerStatsActivity extends Activity {
         return lp;
     }
 
-    private View profileRow(PlayerProfile p) {
-        PlayerStatistics.Summary s = PlayerStatistics.calculate(this, p);
+    private View profileRow(PlayerProfile p, PlayerStatistics.Summary s) {
         int accent = theme.playerAccentOnSurface(p.color);
         int rate = s.matches == 0 ? 0 : Math.round(s.wins * 100f / s.matches);
         String avgPts = s.matches == 0 ? "0.0" : String.format(Locale.US, "%.1f", s.points / (float) s.matches);
+        boolean cloudLinked = CloudConfigStore.isCloudLinked(this, p.id);
 
         LinearLayout row = box(theme.surfaceLow);
         row.setPadding(dp(18), dp(12), dp(18), dp(12));
         row.setMinimumHeight(dp(92));
         row.setBackground(theme.interactiveBackground(this, theme.surfaceLow, 14, 2, accent));
 
-        String headerText = p.name;
+        String headerText = cloudLinked ? p.name + "  ·  ☁ CLOUD" : p.name;
         TextView name = text(headerText, 20, accent);
         name.setTypeface(Typeface.DEFAULT_BOLD);
 
@@ -167,7 +175,8 @@ public class PlayerStatsActivity extends Activity {
         row.addView(basic);
         row.addView(special);
         row.setContentDescription(
-            p.name + ", Color " + UiTheme.playerColorName(p.color)
+            p.name + (cloudLinked ? ", Cloud linked" : ", Local profile")
+                + ", Color " + UiTheme.playerColorName(p.color)
                 + ". " + s.matches + " matches, " + s.wins + " wins, win rate " + rate + " percent. Double-tap to open player profile."
         );
         row.setOnClickListener(v ->
@@ -182,7 +191,7 @@ public class PlayerStatsActivity extends Activity {
                 .setTitle("Cannot compare players")
                 .setMessage("The app cannot compare players yet. A comparison requires at least 2 player profiles. Tap Add player to create another profile.")
                 .setNegativeButton("Cancel action", null)
-                .setPositiveButton("Add player", (d, w) -> addProfile())
+                .setPositiveButton("Add player", (d, w) -> chooseAddPlayerMode())
                 .show();
             return;
         }
@@ -258,7 +267,317 @@ public class PlayerStatsActivity extends Activity {
             .show();
     }
 
-    private void addProfile() {
+    private void chooseAddPlayerMode() {
+        String[] modes = {
+            "Create local player (offline)",
+            "Pull player from cloud (token)",
+            "Create new cloud player (token)"
+        };
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Add player")
+            .setItems(modes, (d, which) -> {
+                if (which == 0) {
+                    addLocalProfileDialog();
+                } else if (which == 1) {
+                    pullCloudProfileDialog();
+                } else if (which == 2) {
+                    createCloudProfileDialog();
+                }
+            })
+            .setNeutralButton("Set up cloud", (d, w) -> showCloudSettingsDialog(null))
+            .setNegativeButton("Cancel action", null)
+            .create();
+        styleDialog(dialog);
+        dialog.show();
+    }
+
+    private void showCloudSettingsDialog(Runnable onSaved) {
+        LinearLayout form = box(theme.surface);
+        form.setPadding(dp(20), dp(12), dp(20), dp(12));
+
+        EditText urlField = theme.editField(
+            this,
+            CloudConfigStore.getProjectUrl(this),
+            "https://your-project.supabase.co",
+            InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI
+        );
+        EditText keyField = theme.editField(
+            this,
+            CloudConfigStore.getAnonKey(this),
+            "Supabase public key",
+            InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD
+        );
+
+        form.addView(label("Supabase project URL"));
+        form.addView(urlField, new LinearLayout.LayoutParams(-1, dp(48)));
+        form.addView(label("Supabase public key"));
+        form.addView(keyField, new LinearLayout.LayoutParams(-1, dp(48)));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Set up Supabase cloud")
+            .setView(form)
+            .setNegativeButton("Cancel action", null)
+            .setPositiveButton("Save settings", null)
+            .create();
+
+        dialog.setOnShowListener(ignored -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(new ColorDrawable(theme.surface));
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(theme.primary);
+            Button saveBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            saveBtn.setTextColor(theme.primary);
+            saveBtn.setOnClickListener(v -> {
+                String rawUrl = urlField.getText().toString().trim();
+                String rawKey = keyField.getText().toString().trim();
+                if (!CloudConfigStore.isValidHttpsEndpoint(rawUrl) || rawKey.isEmpty()) {
+                    showError(
+                        "Invalid cloud settings",
+                        "The Supabase URL or public key is not valid. The URL must start with https:// and the key cannot be empty. Enter both values."
+                    );
+                    return;
+                }
+                CloudConfigStore.saveServerConfig(this, rawUrl, rawKey);
+                dialog.dismiss();
+                if (onSaved != null) onSaved.run();
+            });
+        });
+        dialog.show();
+    }
+
+    private void pullCloudProfileDialog() {
+        LinearLayout form = box(theme.surface);
+        form.setPadding(dp(20), dp(12), dp(20), dp(12));
+
+        boolean hasServerConfig = CloudConfigStore.isServerConfigured(this);
+        EditText urlField = theme.editField(
+            this,
+            CloudConfigStore.getProjectUrl(this),
+            "https://your-project.supabase.co",
+            InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI
+        );
+        EditText keyField = theme.editField(
+            this,
+            CloudConfigStore.getAnonKey(this),
+            "Supabase public key",
+            InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD
+        );
+        EditText tokenField = theme.editField(
+            this,
+            "",
+            "Player secret token",
+            InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD
+        );
+
+        if (!hasServerConfig) {
+            form.addView(label("Supabase project URL"));
+            form.addView(urlField, new LinearLayout.LayoutParams(-1, dp(48)));
+            form.addView(label("Supabase public key"));
+            form.addView(keyField, new LinearLayout.LayoutParams(-1, dp(48)));
+        }
+        form.addView(label("Player secret token"));
+        form.addView(tokenField, new LinearLayout.LayoutParams(-1, dp(48)));
+
+        TextView note = text(
+            "The app hashes the token with SHA-256 and sends x-player-token-hash to pull your profile and statistics.",
+            14,
+            theme.onSurfaceVariant
+        );
+        note.setPadding(0, dp(8), 0, 0);
+        form.addView(note);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Pull player from cloud")
+            .setView(form)
+            .setNegativeButton("Cancel action", null)
+            .setNeutralButton("Edit server", null)
+            .setPositiveButton("Pull player", null)
+            .create();
+
+        dialog.setOnShowListener(ignored -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(new ColorDrawable(theme.surface));
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(theme.primary);
+            Button serverBtn = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
+            serverBtn.setTextColor(theme.primary);
+            serverBtn.setOnClickListener(v -> {
+                dialog.dismiss();
+                showCloudSettingsDialog(this::pullCloudProfileDialog);
+            });
+
+            Button pullBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            pullBtn.setTextColor(theme.primary);
+            pullBtn.setOnClickListener(v -> {
+                if (!hasServerConfig) {
+                    String rawUrl = urlField.getText().toString().trim();
+                    String rawKey = keyField.getText().toString().trim();
+                    if (!CloudConfigStore.isValidHttpsEndpoint(rawUrl) || rawKey.isEmpty()) {
+                        showError(
+                            "Invalid cloud settings",
+                            "The Supabase URL or public key is not valid. The URL must start with https:// and the key cannot be empty. Enter both values."
+                        );
+                        return;
+                    }
+                    CloudConfigStore.saveServerConfig(this, rawUrl, rawKey);
+                }
+                String secretToken = tokenField.getText().toString().trim();
+                if (secretToken.isEmpty()) {
+                    showError(
+                        "Empty player token",
+                        "The player secret token is empty. Supabase requires a secret token to authenticate the player. Enter your secret token."
+                    );
+                    return;
+                }
+                pullBtn.setEnabled(false);
+                pullBtn.setText("Pulling...");
+                SupabaseSyncClient.pullPlayerAsync(this, secretToken, new SupabaseSyncClient.Callback<SupabaseSyncClient.PulledPlayer>() {
+                    @Override
+                    public void onSuccess(SupabaseSyncClient.PulledPlayer result) {
+                        if (isFinishing() || isDestroyed()) return;
+                        dialog.dismiss();
+                        draw();
+                        new AlertDialog.Builder(PlayerStatsActivity.this)
+                            .setTitle("Player synced")
+                            .setMessage("Pulled " + result.profile.name + " from Supabase (" + result.syncedMatchesCount + " saved matches).")
+                            .setPositiveButton("Close dialog", null)
+                            .show();
+                    }
+
+                    @Override
+                    public void onError(String userMessage) {
+                        if (isFinishing() || isDestroyed()) return;
+                        pullBtn.setEnabled(true);
+                        pullBtn.setText("Pull player");
+                        showError("Cannot pull player", userMessage);
+                    }
+                });
+            });
+        });
+        dialog.show();
+    }
+
+    private void createCloudProfileDialog() {
+        LinearLayout form = box(theme.surface);
+        form.setPadding(dp(20), dp(12), dp(20), dp(12));
+
+        boolean hasServerConfig = CloudConfigStore.isServerConfigured(this);
+        EditText urlField = theme.editField(
+            this,
+            CloudConfigStore.getProjectUrl(this),
+            "https://your-project.supabase.co",
+            InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI
+        );
+        EditText keyField = theme.editField(
+            this,
+            CloudConfigStore.getAnonKey(this),
+            "Supabase public key",
+            InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD
+        );
+        EditText nameField = theme.editField(
+            this,
+            "",
+            "Player name",
+            InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        );
+        Spinner colorSpinner = theme.styledSpinner(this, UiTheme.playerColorNames(this), 0);
+        EditText tokenField = theme.editField(
+            this,
+            "",
+            "Choose a secret token",
+            InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD
+        );
+
+        if (!hasServerConfig) {
+            form.addView(label("Supabase project URL"));
+            form.addView(urlField, new LinearLayout.LayoutParams(-1, dp(48)));
+            form.addView(label("Supabase public key"));
+            form.addView(keyField, new LinearLayout.LayoutParams(-1, dp(48)));
+        }
+        form.addView(label("Player name"));
+        form.addView(nameField, new LinearLayout.LayoutParams(-1, dp(48)));
+        form.addView(label("Player color"));
+        form.addView(colorSpinner, new LinearLayout.LayoutParams(-1, dp(48)));
+        form.addView(label("New player secret token"));
+        form.addView(tokenField, new LinearLayout.LayoutParams(-1, dp(48)));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Create cloud player")
+            .setView(form)
+            .setNegativeButton("Cancel action", null)
+            .setPositiveButton("Save and upload", null)
+            .create();
+
+        dialog.setOnShowListener(ignored -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(new ColorDrawable(theme.surface));
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(theme.primary);
+            Button saveBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            saveBtn.setTextColor(theme.primary);
+            saveBtn.setOnClickListener(v -> {
+                if (!hasServerConfig) {
+                    String rawUrl = urlField.getText().toString().trim();
+                    String rawKey = keyField.getText().toString().trim();
+                    if (!CloudConfigStore.isValidHttpsEndpoint(rawUrl) || rawKey.isEmpty()) {
+                        showError(
+                            "Invalid cloud settings",
+                            "The Supabase URL or public key is not valid. The URL must start with https:// and the key cannot be empty. Enter both values."
+                        );
+                        return;
+                    }
+                    CloudConfigStore.saveServerConfig(this, rawUrl, rawKey);
+                }
+                String n = nameField.getText().toString().trim();
+                if (n.isEmpty()) {
+                    showError(
+                        "Empty player name",
+                        "The player name is empty. Each player profile must have a name. Enter a name in the text field."
+                    );
+                    return;
+                }
+                if (ProfileStore.findByName(this, n) != null) {
+                    showError(
+                        "Duplicate player name",
+                        "This player name already exists. Each player profile must have a unique name. Enter a different name."
+                    );
+                    return;
+                }
+                String secretToken = tokenField.getText().toString().trim();
+                if (secretToken.isEmpty()) {
+                    showError(
+                        "Empty player token",
+                        "The player secret token is empty. Supabase requires a secret token to protect the profile. Enter a secret token."
+                    );
+                    return;
+                }
+                PlayerProfile created = new PlayerProfile(n, UiTheme.playerColors(this)[colorSpinner.getSelectedItemPosition()]);
+                ProfileStore.add(this, created);
+                saveBtn.setEnabled(false);
+                saveBtn.setText("Uploading...");
+                SupabaseSyncClient.registerOrPushPlayerAsync(this, created, secretToken, new SupabaseSyncClient.Callback<Void>() {
+                    @Override
+                    public void onSuccess(Void result) {
+                        if (isFinishing() || isDestroyed()) return;
+                        dialog.dismiss();
+                        draw();
+                    }
+
+                    @Override
+                    public void onError(String userMessage) {
+                        if (isFinishing() || isDestroyed()) return;
+                        saveBtn.setEnabled(true);
+                        saveBtn.setText("Save and upload");
+                        draw();
+                        showError("Saved locally, cloud upload failed", userMessage);
+                    }
+                });
+            });
+        });
+        dialog.show();
+    }
+
+    private void addLocalProfileDialog() {
         LinearLayout form = box(theme.surface);
         form.setPadding(dp(20), dp(12), dp(20), dp(12));
         EditText name = theme.editField(this, "", "Player name", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
@@ -270,7 +589,7 @@ public class PlayerStatsActivity extends Activity {
         form.addView(color, new LinearLayout.LayoutParams(-1, dp(48)));
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("Add player")
+            .setTitle("Create local player")
             .setView(form)
             .setNegativeButton("Cancel action", null)
             .setPositiveButton("Save player", null)
@@ -286,19 +605,17 @@ public class PlayerStatsActivity extends Activity {
             saveBtn.setOnClickListener(v -> {
                 String n = name.getText().toString().trim();
                 if (n.isEmpty()) {
-                    new AlertDialog.Builder(this)
-                        .setTitle("Empty player name")
-                        .setMessage("The player name is empty. Each player profile must have a name. Enter a name in the text field.")
-                        .setPositiveButton("Close dialog", null)
-                        .show();
+                    showError(
+                        "Empty player name",
+                        "The player name is empty. Each player profile must have a name. Enter a name in the text field."
+                    );
                     return;
                 }
                 if (ProfileStore.findByName(this, n) != null) {
-                    new AlertDialog.Builder(this)
-                        .setTitle("Duplicate player name")
-                        .setMessage("This player name already exists. Each player profile must have a unique name. Enter a different name.")
-                        .setPositiveButton("Close dialog", null)
-                        .show();
+                    showError(
+                        "Duplicate player name",
+                        "This player name already exists. Each player profile must have a unique name. Enter a different name."
+                    );
                     return;
                 }
                 ProfileStore.add(this, new PlayerProfile(n, UiTheme.playerColors(this)[color.getSelectedItemPosition()]));
@@ -307,6 +624,31 @@ public class PlayerStatsActivity extends Activity {
             });
         });
         dialog.show();
+    }
+
+    private void styleDialog(AlertDialog dialog) {
+        dialog.setOnShowListener(ignored -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(new ColorDrawable(theme.surface));
+            }
+            if (dialog.getButton(AlertDialog.BUTTON_NEGATIVE) != null) {
+                dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(theme.primary);
+            }
+            if (dialog.getButton(AlertDialog.BUTTON_NEUTRAL) != null) {
+                dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor(theme.primary);
+            }
+            if (dialog.getButton(AlertDialog.BUTTON_POSITIVE) != null) {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(theme.primary);
+            }
+        });
+    }
+
+    private void showError(String title, String message) {
+        new AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("Close dialog", null)
+            .show();
     }
 
     private TextView label(String s) {
