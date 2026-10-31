@@ -71,6 +71,14 @@ public final class SecurityAndConcurrencyTest {
         assertFalse(server.verifyTokenIfConfigured(null));
         assertFalse(server.verifyTokenIfConfigured("wrong-token"));
         assertTrue(server.verifyTokenIfConfigured("secret-session-token-123"));
+
+        // Bluetooth watch RFCOMM JSON command validation
+        assertEquals("POINT_1", BluetoothWatchServer.parseWatchCommandJson("{\"command\":\"POINT_1\"}"));
+        assertEquals("POINT_2", BluetoothWatchServer.parseWatchCommandJson("{\"command\":\"POINT_2\"}"));
+        assertEquals("UNDO", BluetoothWatchServer.parseWatchCommandJson("{\"command\":\"UNDO\"}"));
+        assertEquals("RESET", BluetoothWatchServer.parseWatchCommandJson("{\"command\":\"RESET\"}"));
+        assertEquals(null, BluetoothWatchServer.parseWatchCommandJson("{\"command\":\"EXEC\"}"));
+        assertEquals(null, BluetoothWatchServer.parseWatchCommandJson("not-json"));
     }
 
     @Test

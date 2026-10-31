@@ -60,6 +60,8 @@ public class MainActivity extends Activity {
     private TextView pauseOverlay;
     private MediaSession mediaSession;
     private WatchCommandServer watchCommandServer;
+    private BluetoothWatchServer bluetoothWatchServer;
+    private boolean requestedBluetoothPermission;
     private GradientDrawable playerOneBackground, playerTwoBackground;
     private MatchFinishedView finishedOverlay;
     private FireworksView fireworksView;
@@ -96,7 +98,9 @@ public class MainActivity extends Activity {
         startClock();
         restoreMatchFromIntent(getIntent());
         createMediaSession();
-        watchCommandServer = new WatchCommandServer(new Handler(Looper.getMainLooper()), this::handleWatchCommand);
+        Handler mainLoopHandler = new Handler(Looper.getMainLooper());
+        watchCommandServer = new WatchCommandServer(mainLoopHandler, this::handleWatchCommand);
+        bluetoothWatchServer = new BluetoothWatchServer(this, mainLoopHandler, this::handleWatchCommand);
         refreshScreen();
         if (getIntent() != null && getIntent().getBooleanExtra(UiTheme.EXTRA_OPEN_SETTINGS, false)) {
             getIntent().removeExtra(UiTheme.EXTRA_OPEN_SETTINGS);
@@ -132,10 +136,26 @@ public class MainActivity extends Activity {
         super.onResume();
         if (mediaSession != null) mediaSession.setActive(true);
         if (watchCommandServer != null) watchCommandServer.start();
+        if (Build.VERSION.SDK_INT >= 31
+            && !BluetoothWatchServer.hasBluetoothConnectPermission(this)
+            && !requestedBluetoothPermission) {
+            requestedBluetoothPermission = true;
+            requestPermissions(new String[]{android.Manifest.permission.BLUETOOTH_CONNECT}, 1001);
+        } else if (bluetoothWatchServer != null) {
+            bluetoothWatchServer.start();
+        }
         clockHandler.removeCallbacks(clockTicker);
         clockHandler.post(clockTicker);
         syncSelectedProfiles();
         refreshScreen();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 1001 && bluetoothWatchServer != null) {
+            bluetoothWatchServer.start();
+        }
     }
 
     private void syncSelectedProfiles() {
@@ -161,6 +181,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         if (watchCommandServer != null) watchCommandServer.stop();
+        if (bluetoothWatchServer != null) bluetoothWatchServer.stop();
         pauseMatch();
         hideFireworks();
         stopBallPulse(1);
@@ -179,6 +200,7 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         clockHandler.removeCallbacks(clockTicker);
         if (watchCommandServer != null) watchCommandServer.stop();
+        if (bluetoothWatchServer != null) bluetoothWatchServer.stop();
         if (mediaSession != null) mediaSession.release();
         super.onDestroy();
     }
