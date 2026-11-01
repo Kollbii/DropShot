@@ -108,9 +108,9 @@ The table compares the 5 interaction ideas:
 | Idea | Interaction | Status | Eyes-Free Usability |
 |---|---|---|---|
 | **Idea A** | Pre-Match Setup Modal | Proposed | Low (requires screen reading) |
-| **Idea B** | Serve Toggle Icon | Proposed | Medium (small touch target) |
+| **Idea B** | Direct Tap on Service Badge Container | **Implemented** | High (distinct double haptic, zero hold) |
 | **Idea C** | Double-Tap Service Side | Proposed | Medium (can conflict with fast taps) |
-| **Idea D** | 1-Second Hold on Server Tile | **Implemented** | High (distinct double haptic) |
+| **Idea D** | 1-Second Hold on Active Server Tile | Superseded | Low (collision with tap release) |
 | **Idea E** | Horizontal Swipe Gesture | Proposed | Medium (accidental swipe risk) |
 
 ### 3.1 Idea A: Pre-Match Setup Modal (Proposed)
@@ -125,15 +125,20 @@ The table compares the 5 interaction ideas:
 
 ---
 
-### 3.2 Idea B: Serve Toggle Icon (Proposed)
+### 3.2 Idea B: Direct Tap on Service Badge Container (Implemented)
 
 * **Description**:
-  A small icon button (`⇄` or `<>`) displays next to the `[R]` / `[L]` text on the server tile.
+  The bottom area of the server tile contains a dedicated 80 x 36 dp service badge container around `[R]` or `[L]`.
+  Tapping this badge toggles the serve side between `[R]` and `[L]` instantly.
+  A double-haptic vibration confirms the change immediately.
+  Tapping anywhere else on the tile (numbers and initials) adds a point.
 * **Advantages**:
-  * Clear visual affordance.
+  * Zero hold time required (instant single tap).
+  * 100% separation: tapping the badge can never add a point; tapping the score can never switch the side.
+  * Meets WCAG touch target recommendations (80 x 36 dp hit box).
+  * Completely eliminates phantom points on finger release.
 * **Disadvantages**:
-  * The touch target is smaller than 48 dp on a 136 dp wide tile.
-  * High risk of accidental point taps.
+  * Requires touching the bottom badge area instead of anywhere on the tile.
 
 ---
 
@@ -257,8 +262,7 @@ The table summarizes the 4 design options:
    If players prefer zero visual indicators during play, evaluate Idea 4 (Bezel Glow on Disconnect).
 
 2. **Service side selection**:
-   Idea D (1-Second Hold) is currently active and protects against accidental taps.
-   Field testing during active squash matches will verify if the 1.0 second duration is optimal or if 0.8 seconds is faster and safe.
+   Idea B (Direct Tap on Service Badge Container) is active. It isolates serve side toggling to an 80 x 36 dp hit box at the bottom of the server tile, eliminating long-press delays and phantom point scoring on release.
 
 3. **Application exit**:
    Idea A (Edge-Swipe in `dispatchTouchEvent` + Touch Slop) is active. It ensures reliable left-edge exit gestures while filtering out accidental drags on scoring tiles and buttons.

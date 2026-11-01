@@ -60,9 +60,6 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
     private static final long POPUP_BRIGHTNESS_DURATION_MS = 3000L;
     private static final long RESET_HOLD_DURATION_MS = 2000L;
     private static final long SHOW_HOLD_TEXT_DELAY_MS = 400L;
-    private static final long SIDE_SWITCH_HOLD_DURATION_MS = 1000L;
-    private static final long SIDE_SWITCH_SHOW_TEXT_DELAY_MS = 200L;
-    private static final long SIDE_SWITCH_LOCKOUT_DURATION_MS = 2500L;
     private static final long REACTION_DISPLAY_DURATION_MS = 2600L;
 
     private static final int EDGE_SWIPE_MAX_START_DP = 36;
@@ -94,12 +91,6 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
     private TextView p2HeaderView;
     private TextView p2PointsView;
     private TextView p2ServiceSideView;
-
-    private boolean sideSwitchTriggered;
-    private long tileLockoutUntilUptimeMs;
-    private Runnable sideSwitchVisualRunnable;
-    private Runnable sideSwitchHoldRunnable;
-    private final Runnable restoreLockoutRunnable = this::restoreTileLockoutVisuals;
 
     // Score reaction badges (Cat 6-7, Shrek 6-9)
     private ImageView reactionBadgeView;
@@ -180,16 +171,7 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         mainHandler.removeCallbacks(showHoldTextRunnable);
         mainHandler.removeCallbacks(resetHoldRunnable);
         mainHandler.removeCallbacks(dimBrightnessRunnable);
-        mainHandler.removeCallbacks(restoreLockoutRunnable);
         mainHandler.removeCallbacks(hideReactionRunnable);
-        if (sideSwitchVisualRunnable != null) {
-            mainHandler.removeCallbacks(sideSwitchVisualRunnable);
-            sideSwitchVisualRunnable = null;
-        }
-        if (sideSwitchHoldRunnable != null) {
-            mainHandler.removeCallbacks(sideSwitchHoldRunnable);
-            sideSwitchHoldRunnable = null;
-        }
         if (watchClient != null) {
             watchClient.stop();
         }
@@ -454,7 +436,7 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         LinearLayout tile = new LinearLayout(this);
         tile.setOrientation(LinearLayout.VERTICAL);
         tile.setGravity(Gravity.CENTER_HORIZONTAL);
-        tile.setPadding(dp(6), dp(16), dp(6), dp(6));
+        tile.setPadding(dp(6), dp(10), dp(6), dp(4));
         tile.setBackground(tileBg);
         tile.setContentDescription(contentDesc);
         tile.setClickable(true);
@@ -474,10 +456,90 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
             0,
             1f
         ));
-        tile.addView(serviceSideView, new LinearLayout.LayoutParams(
+
+        // Dedicated service side badge container (Option B: tap to toggle side)
+        FrameLayout serviceBadgeContainer = new FrameLayout(this);
+        serviceBadgeContainer.setClickable(true);
+        serviceBadgeContainer.setFocusable(true);
+        serviceBadgeContainer.setContentDescription("Tap to toggle serve side between right and left.");
+
+        GradientDrawable badgeBg = new GradientDrawable();
+        badgeBg.setCornerRadius(dp(6));
+        badgeBg.setColor(Color.TRANSPARENT);
+        serviceBadgeContainer.setBackground(badgeBg);
+
+        FrameLayout.LayoutParams badgeTextParams = new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        );
+        serviceBadgeContainer.addView(serviceSideView, badgeTextParams);
+
+        LinearLayout.LayoutParams containerParams = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ));
+            dp(36)
+        );
+        tile.addView(serviceBadgeContainer, containerParams);
+
+        final float[] badgeDownCoords = new float[2];
+        final boolean[] badgeDragDetected = new boolean[1];
+
+        serviceBadgeContainer.setOnTouchListener((v, event) -> {
+            if (playerNumber != currentState.activeServer) {
+                return false;
+            }
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) {
+                badgeDownCoords[0] = event.getX();
+                badgeDownCoords[1] = event.getY();
+                badgeDragDetected[0] = false;
+                badgeBg.setColor(0x44FFFFFF);
+                return true;
+            } else if (action == MotionEvent.ACTION_MOVE) {
+                if (!badgeDragDetected[0]) {
+                    if (WatchProtocol.isTouchMovementExceeded(badgeDownCoords[0], event.getX(), badgeDownCoords[1], event.getY(), touchSlopPx)) {
+                        badgeDragDetected[0] = true;
+                        badgeBg.setColor(Color.TRANSPARENT);
+                    }
+                }
+                return true;
+            } else if (action == MotionEvent.ACTION_UP) {
+                badgeBg.setColor(Color.TRANSPARENT);
+                if (!badgeDragDetected[0]) {
+                    vibratePattern(VIBRATE_DOUBLE_HAPTIC);
+                    if (watchClient != null) {
+                        watchClient.sendCommand(WatchProtocol.CMD_TOGGLE_SIDE);
+                    }
+                    String newSide = "R".equals(currentState.serviceSide) ? "L" : "R";
+                    currentState = new WatchProtocol.WatchState(
+                        currentState.playerOneInitials,
+                        currentState.playerTwoInitials,
+                        currentState.playerOnePoints,
+                        currentState.playerTwoPoints,
+                        currentState.playerOneSets,
+                        currentState.playerTwoSets,
+                        currentState.targetSets,
+                        currentState.activeServer,
+                        newSide,
+                        currentState.playerOneColor,
+                        currentState.playerOneRainbow,
+                        currentState.playerTwoColor,
+                        currentState.playerTwoRainbow,
+                        currentState.actionLabel,
+                        currentState.gameOrMatchBall,
+                        currentState.matchFinished,
+                        currentState.paused
+                    );
+                    serviceSideView.setText("[" + newSide + "]");
+                }
+                return true;
+            } else if (action == MotionEvent.ACTION_CANCEL) {
+                badgeBg.setColor(Color.TRANSPARENT);
+                badgeDragDetected[0] = false;
+                return true;
+            }
+            return false;
+        });
 
         final String command = playerNumber == 1 ? WatchProtocol.CMD_POINT_1 : WatchProtocol.CMD_POINT_2;
         final float[] downCoords = new float[2];
@@ -485,111 +547,22 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
 
         tile.setOnTouchListener((v, event) -> {
             int action = event.getActionMasked();
-            long now = SystemClock.uptimeMillis();
-            if (now < tileLockoutUntilUptimeMs) {
-                return true;
-            }
             if (action == MotionEvent.ACTION_DOWN) {
                 downCoords[0] = event.getX();
                 downCoords[1] = event.getY();
                 dragDetected[0] = false;
-                sideSwitchTriggered = false;
                 v.setAlpha(0.82f);
-                if (playerNumber == currentState.activeServer) {
-                    if (sideSwitchVisualRunnable != null) {
-                        mainHandler.removeCallbacks(sideSwitchVisualRunnable);
-                    }
-                    if (sideSwitchHoldRunnable != null) {
-                        mainHandler.removeCallbacks(sideSwitchHoldRunnable);
-                    }
-                    sideSwitchVisualRunnable = () -> {
-                        serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11);
-                        serviceSideView.setTextColor(ACTIVE_SERVER_BORDER_COLOR);
-                        serviceSideView.setText("[CHANGING...]");
-                    };
-                    mainHandler.postDelayed(sideSwitchVisualRunnable, SIDE_SWITCH_SHOW_TEXT_DELAY_MS);
-
-                    sideSwitchHoldRunnable = () -> {
-                        sideSwitchTriggered = true;
-                        vibratePattern(VIBRATE_DOUBLE_HAPTIC);
-                        if (watchClient != null) {
-                            watchClient.sendCommand(WatchProtocol.CMD_TOGGLE_SIDE);
-                        }
-                        String newSide = "R".equals(currentState.serviceSide) ? "L" : "R";
-                        currentState = new WatchProtocol.WatchState(
-                            currentState.playerOneInitials,
-                            currentState.playerTwoInitials,
-                            currentState.playerOnePoints,
-                            currentState.playerTwoPoints,
-                            currentState.playerOneSets,
-                            currentState.playerTwoSets,
-                            currentState.targetSets,
-                            currentState.activeServer,
-                            newSide,
-                            currentState.playerOneColor,
-                            currentState.playerOneRainbow,
-                            currentState.playerTwoColor,
-                            currentState.playerTwoRainbow,
-                            currentState.actionLabel,
-                            currentState.gameOrMatchBall,
-                            currentState.matchFinished,
-                            currentState.paused
-                        );
-                        serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11);
-                        serviceSideView.setTextColor(ACTIVE_SERVER_BORDER_COLOR);
-                        serviceSideView.setText("[RELEASE]");
-                    };
-                    mainHandler.postDelayed(sideSwitchHoldRunnable, SIDE_SWITCH_HOLD_DURATION_MS);
-                }
                 return true;
             } else if (action == MotionEvent.ACTION_MOVE) {
-                if (!dragDetected[0] && !sideSwitchTriggered) {
+                if (!dragDetected[0]) {
                     if (WatchProtocol.isTouchMovementExceeded(downCoords[0], event.getX(), downCoords[1], event.getY(), touchSlopPx)) {
                         dragDetected[0] = true;
                         v.setAlpha(1.0f);
-                        if (playerNumber == currentState.activeServer) {
-                            if (sideSwitchVisualRunnable != null) {
-                                mainHandler.removeCallbacks(sideSwitchVisualRunnable);
-                                sideSwitchVisualRunnable = null;
-                            }
-                            if (sideSwitchHoldRunnable != null) {
-                                mainHandler.removeCallbacks(sideSwitchHoldRunnable);
-                                sideSwitchHoldRunnable = null;
-                            }
-                            serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-                            serviceSideView.setTextColor(Color.WHITE);
-                            serviceSideView.setText("[" + currentState.serviceSide + "]");
-                        }
                     }
                 }
                 return true;
             } else if (action == MotionEvent.ACTION_UP) {
-                if (sideSwitchVisualRunnable != null) {
-                    mainHandler.removeCallbacks(sideSwitchVisualRunnable);
-                    sideSwitchVisualRunnable = null;
-                }
-                if (sideSwitchHoldRunnable != null) {
-                    mainHandler.removeCallbacks(sideSwitchHoldRunnable);
-                    sideSwitchHoldRunnable = null;
-                }
-                if (sideSwitchTriggered) {
-                    sideSwitchTriggered = false;
-                    tileLockoutUntilUptimeMs = SystemClock.uptimeMillis() + SIDE_SWITCH_LOCKOUT_DURATION_MS;
-                    if (p1Tile != null) p1Tile.setAlpha(0.6f);
-                    if (p2Tile != null) p2Tile.setAlpha(0.6f);
-                    serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11);
-                    serviceSideView.setTextColor(ACTIVE_SERVER_BORDER_COLOR);
-                    serviceSideView.setText("[LOCKED]");
-                    mainHandler.removeCallbacks(restoreLockoutRunnable);
-                    mainHandler.postDelayed(restoreLockoutRunnable, SIDE_SWITCH_LOCKOUT_DURATION_MS);
-                    return true;
-                }
                 v.setAlpha(1.0f);
-                if (playerNumber == currentState.activeServer) {
-                    serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-                    serviceSideView.setTextColor(Color.WHITE);
-                    serviceSideView.setText("[" + currentState.serviceSide + "]");
-                }
                 if (!dragDetected[0]) {
                     if (watchClient != null) {
                         watchClient.sendCommand(command);
@@ -600,29 +573,6 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
             } else if (action == MotionEvent.ACTION_CANCEL) {
                 v.setAlpha(1.0f);
                 dragDetected[0] = false;
-                if (sideSwitchVisualRunnable != null) {
-                    mainHandler.removeCallbacks(sideSwitchVisualRunnable);
-                    sideSwitchVisualRunnable = null;
-                }
-                if (sideSwitchHoldRunnable != null) {
-                    mainHandler.removeCallbacks(sideSwitchHoldRunnable);
-                    sideSwitchHoldRunnable = null;
-                }
-                if (sideSwitchTriggered) {
-                    sideSwitchTriggered = false;
-                    tileLockoutUntilUptimeMs = SystemClock.uptimeMillis() + SIDE_SWITCH_LOCKOUT_DURATION_MS;
-                    if (p1Tile != null) p1Tile.setAlpha(0.6f);
-                    if (p2Tile != null) p2Tile.setAlpha(0.6f);
-                    serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11);
-                    serviceSideView.setTextColor(ACTIVE_SERVER_BORDER_COLOR);
-                    serviceSideView.setText("[LOCKED]");
-                    mainHandler.removeCallbacks(restoreLockoutRunnable);
-                    mainHandler.postDelayed(restoreLockoutRunnable, SIDE_SWITCH_LOCKOUT_DURATION_MS);
-                } else if (playerNumber == currentState.activeServer) {
-                    serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-                    serviceSideView.setTextColor(Color.WHITE);
-                    serviceSideView.setText("[" + currentState.serviceSide + "]");
-                }
                 return true;
             }
             return false;
@@ -854,22 +804,16 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         p1PointsView.setText(String.valueOf(state.playerOnePoints));
         p2PointsView.setText(String.valueOf(state.playerTwoPoints));
 
-        boolean isLocked = SystemClock.uptimeMillis() < tileLockoutUntilUptimeMs;
-        if (p1Tile != null) p1Tile.setAlpha(isLocked ? 0.6f : 1.0f);
-        if (p2Tile != null) p2Tile.setAlpha(isLocked ? 0.6f : 1.0f);
-
         boolean p1Serves = state.activeServer == 1;
-        String sideTag = isLocked ? "[LOCKED]" : ("[" + state.serviceSide + "]");
-        int sideTextSize = isLocked ? 11 : 14;
-        int sideColor = isLocked ? ACTIVE_SERVER_BORDER_COLOR : Color.WHITE;
+        String sideTag = "[" + state.serviceSide + "]";
 
-        p1ServiceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, sideTextSize);
-        p1ServiceSideView.setTextColor(sideColor);
+        p1ServiceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+        p1ServiceSideView.setTextColor(Color.WHITE);
         p1ServiceSideView.setText(p1Serves ? sideTag : "");
         p1ServiceSideView.setVisibility(p1Serves ? View.VISIBLE : View.INVISIBLE);
 
-        p2ServiceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, sideTextSize);
-        p2ServiceSideView.setTextColor(sideColor);
+        p2ServiceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+        p2ServiceSideView.setTextColor(Color.WHITE);
         p2ServiceSideView.setText(!p1Serves ? sideTag : "");
         p2ServiceSideView.setVisibility(!p1Serves ? View.VISIBLE : View.INVISIBLE);
 
@@ -897,25 +841,6 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         }
         previousP1Points = state.playerOnePoints;
         previousP2Points = state.playerTwoPoints;
-    }
-
-    private void restoreTileLockoutVisuals() {
-        if (p1Tile != null) p1Tile.setAlpha(1.0f);
-        if (p2Tile != null) p2Tile.setAlpha(1.0f);
-        boolean p1Serves = currentState.activeServer == 1;
-        String sideTag = "[" + currentState.serviceSide + "]";
-        if (p1ServiceSideView != null) {
-            p1ServiceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-            p1ServiceSideView.setTextColor(Color.WHITE);
-            p1ServiceSideView.setText(p1Serves ? sideTag : "");
-            p1ServiceSideView.setVisibility(p1Serves ? View.VISIBLE : View.INVISIBLE);
-        }
-        if (p2ServiceSideView != null) {
-            p2ServiceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-            p2ServiceSideView.setTextColor(Color.WHITE);
-            p2ServiceSideView.setText(!p1Serves ? sideTag : "");
-            p2ServiceSideView.setVisibility(!p1Serves ? View.VISIBLE : View.INVISIBLE);
-        }
     }
 
     private void showReactionBadge(int drawableResId) {
