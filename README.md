@@ -1,15 +1,16 @@
 # DropShot — Squash Scoreboard
 
 DropShot is a squash scoreboard app for Android phones and tablets.
-It works with a touch screen, a Bluetooth remote control, and an Amazfit (Zepp OS) watch.
+It works with a touch screen, a Bluetooth remote control, an Android Watch, and an Amazfit watch.
 
 ---
 
 ## 1. Purpose of the app
 
 Players put a phone or a tablet on a stand outside the squash court.
-The app shows the current score in large digits that are easy to read through the court glass.
-Players can add points from the court with a Bluetooth remote control or a watch, and check their match history and statistics after play.
+The app shows the score in large digits that are easy to read through the court glass.
+Players can add points from the court with a Bluetooth remote control or a watch.
+After the match, players can review their history, charts, and statistics.
 
 ---
 
@@ -17,12 +18,12 @@ Players can add points from the court with a Bluetooth remote control or a watch
 
 | Use case | How DropShot helps |
 |---|---|
-| **Score a match from inside the court** | Press a key on a Bluetooth remote control or tap the Amazfit watch to add 1 point, undo 1 point, or start a new match. |
-| **Score a match on the screen** | Put the phone or tablet outside the court. Tap the left or right player panel to add 1 point. |
-| **Track the court rental time** | Start the court timer on the Match screen. The border changes color and the phone vibrates at 30 min, 15 min, and 5 min before the rental ends. |
-| **Review past matches and charts** | Open the History screen to see finished and unfinished matches, point timelines, and game progress charts. |
-| **Compare 2 players** | Open the Players screen to see career win rates, point averages, head-to-head scores, and special point counts (`6-7` and `6-9`). |
-| **Customize player colors** | Open the Players screen to roll the squash lootbox and equip solid, gradient, or animated colors for each profile. |
+| **Score a match from inside the court** | Press a key on a Bluetooth remote control, or tap an Android Watch or Amazfit watch to score. |
+| **Score a match on the screen** | Put the phone outside the court. Tap the left or right player panel to add 1 point. |
+| **Track the court rental time** | Start the court timer on the Match screen. The border changes color and vibrates at 30 min, 15 min, and 5 min. |
+| **Review past matches and charts** | Open the History screen to see finished matches, timelines, and game progress charts. |
+| **Compare 2 players** | Open the Players screen to see career win rates, averages, head-to-head records, and `6-7` / `6-9` counts. |
+| **Customize and sync player colors** | Roll the squash lootbox to unlock solid, gradient, and animated colors. Sync rewards with the cloud. |
 
 ---
 
@@ -44,10 +45,10 @@ Tap the `⌃` button at the bottom of the screen to open the navigation bar.
    │ • Court timer    │ │ • All /      │ │ • Add player     │ │ • Appearance      │
    │ • Pause / Resume │ │   Finished / │ │ • Compare        │ │ • Remote keys     │
    │ • Undo point     │ │   Unfinished │ │   players        │ │ • Court & help    │
-   │ • Start new      │ │ • Resume     │ │ • Open lootbox   │ └───────────────────┘
-   │   match          │ │   match      │ │ • Player detail  │
-   └──────────────────┘ │ • Match      │ │   & color editor │
-                        │   charts     │ └──────────────────┘
+   │ • Serve side     │ │ • Resume     │ │ • Open lootbox   │ └───────────────────┘
+   │ • Start new      │ │   match      │ │ • Sync cloud     │
+   │   match          │ │ • Match      │ │ • Color editor   │
+   └──────────────────┘ │   charts     │ └──────────────────┘
                         └──────────────┘
 ```
 
@@ -55,22 +56,22 @@ Tap the `⌃` button at the bottom of the screen to open the navigation bar.
 
 | Feature | Screen | How to open it |
 |---|---|---|
-| **Add 1 point** | Match | Tap the panel for Player 1 or Player 2, press the remote key, or tap `+1` / `+2` on the watch. |
-| **Undo the last point** | Match | Tap `↶` in the top bar, press the Undo key on the remote control, or tap `<<` on the watch. |
-| **Pause or resume the match** | Match | Tap `Ⅱ` / `▶` in the top bar, or tap the pause overlay. |
-| **Start a new match** | Match | Tap `↺` in the top bar, or tap `R` on the watch. |
-| **Start or stop the court timer** | Match | Tap **Start court timer** in the top-left corner. |
-| **Change the court timer warnings** | Settings → Court & help | Hold **Start court timer** on the Match screen, or open **Settings** and tap **Court & help**. |
-| **Select player profiles and rules** | Settings → Players & rules | Hold a player panel on the Match screen, or open **Settings** from the navigation bar. |
-| **Switch dark theme or high contrast** | Settings → Appearance | Open **Settings** and tap **Appearance**. |
+| **Add 1 point** | Match | Tap Player 1 or Player 2, press the remote key, or tap the watch tile. |
+| **Undo the last point** | Match | Tap `↶` in the top bar, press Undo on the remote, or tap `UNDO` on the watch. |
+| **Toggle serve side** | Match / Watch | Tap the server panel on the phone, or tap `[R]` / `[L]` on the watch. |
+| **Pause or resume match** | Match | Tap `Ⅱ` / `▶` in the top bar, or tap the pause overlay. |
+| **Start a new match** | Match | Tap `↺` in the top bar, or hold `RESET` on the watch. |
+| **Start or stop court timer** | Match | Tap **Start court timer** in the top-left corner. |
+| **Change court timer warnings** | Settings → Court & help | Hold **Start court timer** on the Match screen, or open **Settings → Court & help**. |
+| **Select profiles and rules** | Settings → Players & rules | Hold a player panel on the Match screen, or open **Settings → Players & rules**. |
+| **Switch dark theme or contrast** | Settings → Appearance | Open **Settings** and tap **Appearance**. |
 | **Change Bluetooth remote keys** | Settings → Remote keys | Open **Settings** and tap **Remote keys**. |
-| **Read the remote and watch guide** | Settings → Court & help | Open **Settings**, tap **Court & help**, and tap **Open help and remote guide**. |
-| **View or resume saved matches** | History | Tap `⌃` at the bottom of the screen and tap **History**. |
-| **View match charts and statistics** | History → Match detail | Tap any match row in the **History** list. Tap a chart to open it in fullscreen. |
-| **Add a player profile** | Players | Open **Players** from the navigation bar and tap **Add player**. |
-| **Compare 2 players (head-to-head)** | Players | Open **Players** and tap **Compare players**. |
-| **Edit a player name or color** | Players → Player detail | Tap a player in **Players**, then tap **Edit player**. |
-| **Unlock new player colors** | Players → Lootbox | Open **Players**, tap **Open lootbox prototype**, and select a player. |
+| **View or resume saved matches** | History | Open the navigation bar and tap **History**. |
+| **View match charts and stats** | History → Match detail | Tap any match row in the **History** list. |
+| **Add a player profile** | Players | Open **Players** and tap **Add player**. |
+| **Compare 2 players** | Players | Open **Players** and tap **Compare players**. |
+| **Unlock new player colors** | Players → Lootbox | Open **Players** and tap **Open lootbox prototype**. |
+| **Sync cosmetics to cloud** | Players | Open **Players** and tap **Sync cloud**. |
 
 ---
 
@@ -81,43 +82,47 @@ Tap the `⌃` button at the bottom of the screen to open the navigation bar.
 - By default, a player wins a game at **11 points** with a **2-point lead**.
 - By default, a player wins the match at **3 games**.
 - You can change both numbers in **Settings → Players & rules**.
-- When 1 more point wins a game or the match, the top bar shows **GAME BALL** or **MATCH BALL** and the player panel border pulses.
-- When the score reaches `6-7`, `7-6`, `6-9`, or `9-6`, the screen shows a fireworks effect.
-- When a match finishes, you can start a new match, add 3 more games to continue the match, or open the match details.
+- The active server shows a highlight border and serve side (`[R]` or `[L]`).
+- When 1 point wins a game or the match, the top bar shows **GAME BALL** or **MATCH BALL**.
+- When the score reaches `6-7`, `7-6`, `6-9`, or `9-6`, the screen shows animations.
 
 ### 4.2 Court timer
 
-- Tap **Start court timer** on the Match screen. The app sets the start time to the current full hour.
-- Default rental duration is **60 min**.
-- Default warnings appear at:
-  - **30 min** before the end (green border, 1 vibration pulse).
-  - **15 min** before the end (gold border, 2 vibration pulses).
-  - **5 min** before the end (red border, 3 vibration pulses).
+- Tap **Start court timer** on the Match screen.
+- Default duration is **60 min**.
+- Warnings show at **30 min** (green), **15 min** (gold), and **5 min** (red) before rental ends.
 
 ### 4.3 Bluetooth remote control
 
 > [!WARNING]
-> The volume keys change the score only while the Match screen is open.
+> Volume keys change the score only while the Match screen is open.
 
-1. Pair the Bluetooth remote control in the Android settings.
+1. Pair the Bluetooth remote control in Android settings.
 2. Open the Match screen in DropShot.
-3. Use the default keys (or change them in **Settings → Remote keys**):
+3. Default keys:
+   - `Volume +`: Add 1 point to Player 1
+   - `Volume -`: Add 1 point to Player 2
+   - `Pause`: Undo last point
+   - `Play`: Start new match
 
-| Remote key | Default action |
-|---|---|
-| `Volume +` | Add 1 point to Player 1 |
-| `Volume -` | Add 1 point to Player 2 |
-| `Pause` | Undo the last point |
-| `Play` | Start a new match |
+### 4.4 Watch apps
 
-### 4.4 Amazfit watch (Zepp OS)
+#### 4.4.1 Android Watch (Wear OS / LG G Watch)
 
-> [!WARNING]
-> If the watch loses the Bluetooth connection, the watch does not send the command again. This rule prevents a late point after reconnection.
+The `AndroidWatch/` module provides a standalone remote for Android Wear watches (API 20+):
+- **75/25 screen split**: Top 75% displays the two player tiles. Bottom 25% holds the `UNDO` and `RESET` buttons.
+- **Score tiles**: Tap a tile to add 1 point.
+- **Serve side badge (`[R]` / `[L]`)**: Tap directly to toggle the serve side. It never triggers a point.
+- **Cosmetics**: Displays unlocked player colors and gradients (Purple and Living Rainbow) on the score.
+- **Reactions**: Shows quick graphic animations when the score reaches `6-7` (Cat) or `6-9` (Shrek).
+- **Swipe to exit**: Swipe right from the left screen edge to exit smoothly to the watch face.
+- **Status dot**: A micro dot in the top notch shows Bluetooth status. Tap to reconnect.
 
-DropShot includes 2 watch apps in `ZeppOS/`:
-- **Punkty Squash** (`ZeppOS/`): A standalone 2 × 2 button remote control for the watch.
-- **Punkty Squash Trening** (`ZeppOS/workout-extension/`): A workout data page that you can add inside the Squash workout mode on the watch.
+#### 4.4.2 Amazfit watch (Zepp OS)
+
+The `ZeppOS/` directory provides 2 watch apps:
+- **Punkty Squash** (`ZeppOS/`): Standalone 2 × 2 button remote control.
+- **Punkty Squash Trening** (`ZeppOS/workout-extension/`): Workout page inside the squash workout mode.
 
 | Watch button | Action |
 |---|---|
@@ -128,31 +133,27 @@ DropShot includes 2 watch apps in `ZeppOS/`:
 
 ### 4.5 Match history and charts
 
-The app saves up to **100 matches** automatically.
-- You can search matches by player name, date, or score.
-- You can filter the list by **All**, **Finished**, or **Unfinished**.
-- Tap **Resume match** on any unfinished match to continue play immediately.
-- Tap a match row to see 4 detail pages:
-  1. **Point timeline chart**: Shows the point difference across the match.
-  2. **Game progress chart**: Shows point-by-point progress inside each game.
-  3. **Games summary chart**: Shows the points and duration of each game.
-  4. **Match statistics**: Shows streaks, game balls, durations, and point shares.
+- Saves up to **100 matches** automatically.
+- Filter by **All**, **Finished**, or **Unfinished**.
+- Tap **Resume match** on an unfinished match to continue play.
+- Match details include 4 tabs: point timeline, game progress, games summary, and match statistics.
 
 ### 4.6 Player profiles, statistics, and cosmetics
 
-- Each profile tracks total matches, wins, win rate, total points, average points per match, average points per game, and special `6-7` / `6-9` points.
-- Every player starts with 4 colors: **Blue**, **Red**, **Green**, and **Gold**.
-- Players can open lootboxes to unlock extra solid colors (Green and Gray tiers), gradients (Purple tier), and the animated **Living Rainbow** (Gold tier).
+- Tracks career matches, wins, win rates, averages, and special score counts.
+- Unlock extra colors through the squash lootbox: Green, Gray, Purple gradients, and Living Rainbow.
+- Tap **Sync cloud** in the Players screen to sync unlocked cosmetics through Supabase.
 
 ---
 
 ## 5. Install and run
 
-### Option 1: Install the release APK on an Android device
+### Option 1: Install the release APKs
 
 1. Open the [Releases page](https://github.com/Kollbii/DropShot/releases) on GitHub.
-2. Download the `.apk` file from the latest release.
-3. Open the `.apk` file on your Android phone or tablet (Android 8.0 / API 26 or newer) to install DropShot.
+2. Download the APK files:
+   - `DropShot-X.Y.Z.apk`: Install on your Android phone or tablet (Android 8.0+ / API 26+).
+   - `DropShot-Watch-X.Y.Z.apk`: Install on your Android Watch (Android 4.4W+ / API 20+).
 
 ### Option 2: Build from source
 
@@ -160,8 +161,7 @@ Use the `Makefile` in the repository root:
 
 | Task | Command |
 |---|---|
-| Build the debug APK | `make build` |
-| Install and start on a connected device | `make run` |
-| Start the Android emulator and run the app | `make start` |
-| Check SDK, JDK, and device status | `make status` |
-| Stop the emulator and background daemons | `make stop` |
+| Build phone debug APK | `make build` |
+| Install and run on phone | `make run` |
+| Build watch debug APK | `gradle -p AndroidWatch assembleDebug` |
+| Run all unit tests | `gradle -p Android testDebugUnitTest && gradle -p AndroidWatch testDebugUnitTest` |

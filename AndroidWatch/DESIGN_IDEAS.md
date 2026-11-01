@@ -128,14 +128,14 @@ The table compares the 5 interaction ideas:
 ### 3.2 Idea B: Direct Tap on Service Badge Container (Implemented)
 
 * **Description**:
-  The bottom area of the server tile contains a dedicated 80 x 36 dp service badge container around `[R]` or `[L]`.
+  The bottom area of the server tile contains a dedicated full-width x 30 dp service badge container around `[R]` or `[L]`.
   Tapping this badge toggles the serve side between `[R]` and `[L]` instantly.
   A double-haptic vibration confirms the change immediately.
   Tapping anywhere else on the tile (numbers and initials) adds a point.
 * **Advantages**:
   * Zero hold time required (instant single tap).
   * 100% separation: tapping the badge can never add a point; tapping the score can never switch the side.
-  * Meets WCAG touch target recommendations (80 x 36 dp hit box).
+  * Meets WCAG touch target recommendations with full tile width.
   * Completely eliminates phantom points on finger release.
 * **Disadvantages**:
   * Requires touching the bottom badge area instead of anywhere on the tile.

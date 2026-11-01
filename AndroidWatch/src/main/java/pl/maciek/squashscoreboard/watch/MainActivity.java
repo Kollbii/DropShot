@@ -30,7 +30,7 @@ import android.widget.TextView;
  * Implements:
  * - Low backlight brightness (0.08f) during active play, with a 3-second brightness boost on match end.
  * - Distinct eyes-free vibration patterns (P1 30 ms, P2 2x25 ms, Game/Match ball +150 ms, Undo 80 ms, Action 100 ms).
- * - 70/30 vertical screen split with live score tiles, 3-letter initials, sets dots, active server 4dp border,
+ * - 75/25 vertical screen split with live score tiles, 3-letter initials, sets dots, active server 4dp border,
  *   service box side ([L] / [R]), and synchronized player colors (including rainbow linear gradients).
  * - Dynamic START / STOP / NEXT button with 1-second hold protection for STOP during active play.
  * - Full-screen Match-End modal pop-up overlay with winner name, final score, and OK button.
@@ -288,19 +288,19 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         grid.setOrientation(LinearLayout.VERTICAL);
         grid.setBackgroundColor(COLOR_BG);
 
-        // Top row: 70% height (layout_weight="7")
+        // Top row: 75% height (layout_weight="75")
         LinearLayout topRow = new LinearLayout(this);
         topRow.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams topRowParams = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 0, 7f
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 75f
         );
         topRowParams.bottomMargin = gap / 2;
 
-        // Bottom row: 30% height (layout_weight="3")
+        // Bottom row: 25% height (layout_weight="25")
         LinearLayout bottomRow = new LinearLayout(this);
         bottomRow.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams bottomRowParams = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 0, 3f
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 25f
         );
         bottomRowParams.topMargin = gap / 2;
 
@@ -477,7 +477,7 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
 
         LinearLayout.LayoutParams containerParams = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            dp(36)
+            dp(30)
         );
         tile.addView(serviceBadgeContainer, containerParams);
 
