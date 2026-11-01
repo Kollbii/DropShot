@@ -83,7 +83,12 @@ public final class RewardCatalog {
 
     public static Reward byId(String id) {
         if (id == null) return null;
-        for (Reward reward : ENTRIES) if (reward.id.equals(id)) return reward;
+        String clean = id.trim();
+        for (Reward reward : ENTRIES) {
+            if (reward.id.equalsIgnoreCase(clean) || reward.name.equalsIgnoreCase(clean)) {
+                return reward;
+            }
+        }
         return null;
     }
 

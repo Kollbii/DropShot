@@ -145,6 +145,22 @@ public final class SupabaseSyncClient {
 
                 // 4. Restore unlocked rewards from cloud
                 JSONArray unlockedRewards = playerObj.optJSONArray("unlocked_rewards");
+                if (unlockedRewards == null) {
+                    String raw = playerObj.optString("unlocked_rewards", null);
+                    if (raw != null) {
+                        String trimmed = raw.trim();
+                        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+                            try { unlockedRewards = new JSONArray(trimmed); } catch (Exception ignored) {}
+                        } else if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+                            String inner = trimmed.substring(1, trimmed.length() - 1);
+                            unlockedRewards = new JSONArray();
+                            for (String part : inner.split(",")) {
+                                String clean = part.replace("\"", "").trim();
+                                if (!clean.isEmpty()) unlockedRewards.put(clean);
+                            }
+                        }
+                    }
+                }
                 if (unlockedRewards != null) {
                     for (int i = 0; i < unlockedRewards.length(); i++) {
                         String rewardId = unlockedRewards.optString(i, null);

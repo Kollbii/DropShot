@@ -144,5 +144,24 @@ public final class SecurityAndAuthoritativeLootboxTest {
         assertEquals("Single-use ticket must succeed exactly once under concurrency", 1, successes.get());
         assertEquals(threads - 1, rejections.get());
     }
+
+    @Test
+    public void rewardCatalogResolvesByIdCaseInsensitivelyAndByName() {
+        RewardCatalog.Reward orchid = RewardCatalog.byId("orchid");
+        assertNotNull(orchid);
+        assertEquals("orchid", orchid.id);
+        assertEquals("Orchid", orchid.name);
+
+        // Case-insensitive resolution
+        assertEquals(orchid, RewardCatalog.byId("Orchid"));
+        assertEquals(orchid, RewardCatalog.byId("ORCHID"));
+        assertEquals(orchid, RewardCatalog.byId("  orchid  "));
+
+        // Resolution by user-facing name
+        assertEquals(orchid, RewardCatalog.byId("Orchid"));
+        RewardCatalog.Reward rainbow = RewardCatalog.byId("Living Rainbow");
+        assertNotNull(rainbow);
+        assertEquals("rainbow", rainbow.id);
+    }
 }
 
