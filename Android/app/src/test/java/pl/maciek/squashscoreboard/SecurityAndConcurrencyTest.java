@@ -62,6 +62,8 @@ public final class SecurityAndConcurrencyTest {
         assertTrue(InputValidator.isAllowedWatchCommand("POINT_2"));
         assertTrue(InputValidator.isAllowedWatchCommand("UNDO"));
         assertTrue(InputValidator.isAllowedWatchCommand("RESET"));
+        assertTrue(InputValidator.isAllowedWatchCommand("TOGGLE_PAUSE"));
+        assertTrue(InputValidator.isAllowedWatchCommand("TOGGLE_SIDE"));
         assertFalse(InputValidator.isAllowedWatchCommand("DROP_ALL"));
         assertFalse(InputValidator.isAllowedWatchCommand(""));
 
@@ -77,6 +79,8 @@ public final class SecurityAndConcurrencyTest {
         assertEquals("POINT_2", BluetoothWatchServer.parseWatchCommandJson("{\"command\":\"POINT_2\"}"));
         assertEquals("UNDO", BluetoothWatchServer.parseWatchCommandJson("{\"command\":\"UNDO\"}"));
         assertEquals("RESET", BluetoothWatchServer.parseWatchCommandJson("{\"command\":\"RESET\"}"));
+        assertEquals("TOGGLE_PAUSE", BluetoothWatchServer.parseWatchCommandJson("{\"command\":\"TOGGLE_PAUSE\"}"));
+        assertEquals("TOGGLE_SIDE", BluetoothWatchServer.parseWatchCommandJson("{\"command\":\"TOGGLE_SIDE\"}"));
         assertEquals(null, BluetoothWatchServer.parseWatchCommandJson("{\"command\":\"EXEC\"}"));
         assertEquals(null, BluetoothWatchServer.parseWatchCommandJson("not-json"));
     }
@@ -95,11 +99,53 @@ public final class SecurityAndConcurrencyTest {
         assertEquals(1, state.getPlayerOneSets());
         assertEquals(0, state.getPlayerOnePoints());
 
-        // Undo across set boundary restores 10-9 in set 1
+        // Undo across set boundary restores 10-9 in set 1 (where Player 2 scored the 9th point)
         state.undo();
         assertEquals(0, state.getPlayerOneSets());
         assertEquals(10, state.getPlayerOnePoints());
         assertEquals(9, state.getPlayerTwoPoints());
+        assertTrue(state.isGameOrMatchBall());
+        assertEquals(2, state.getActiveServer());
+        assertEquals("R", state.getServiceSide());
+
+        // Verify server alternation and initials/JSON builders for watch state
+        state.addPoint(2); // 10-10 consecutive point for Player 2 -> toggles to L
+        assertEquals(2, state.getActiveServer());
+        assertEquals("L", state.getServiceSide());
+        assertFalse(state.isGameOrMatchBall());
+
+        state.addPoint(2); // 10-11 consecutive point for Player 2 -> toggles to R, game ball
+        assertEquals(2, state.getActiveServer());
+        assertEquals("R", state.getServiceSide());
+        assertTrue(state.isGameOrMatchBall());
+
+        state.addPoint(1); // 11-11 handout to Player 1 -> starts fresh on R
+        assertEquals(1, state.getActiveServer());
+        assertEquals("R", state.getServiceSide());
+        assertFalse(state.isGameOrMatchBall());
+
+        // Player 1 chooses to toggle service side to L
+        state.toggleServiceSide();
+        assertEquals("L", state.getServiceSide());
+        state.toggleServiceSide();
+        assertEquals("R", state.getServiceSide());
+
+        assertEquals("KAC", BluetoothWatchServer.extractInitials("Kacper", "P1"));
+        assertEquals("ŁUK", BluetoothWatchServer.extractInitials("Łukasz", "P2"));
+        String stateLine = BluetoothWatchServer.buildStateJsonLine(
+            "Kacper", "Łukasz", 10, 11, 1, 0, 2, 2, "L",
+            0xFF2F7CF6, false, BluetoothWatchServer.RAINBOW_COLOR_KEY, true,
+            "STOP", true, false, false
+        );
+        assertTrue(stateLine.contains("\"type\":\"STATE\""));
+        assertTrue(stateLine.contains("\"n1\":\"KAC\""));
+        assertTrue(stateLine.contains("\"r2\":true"));
+        assertTrue(stateLine.contains("\"side\":\"L\""));
+
+        String matchEndedLine = BluetoothWatchServer.buildMatchEndedJsonLine("Kacper", "2 - 1");
+        assertTrue(matchEndedLine.contains("\"type\":\"MATCH_ENDED\""));
+        assertTrue(matchEndedLine.contains("\"winner\":\"Kacper\""));
+        assertTrue(matchEndedLine.contains("\"score\":\"2 - 1\""));
     }
 
     @Test

@@ -48,7 +48,7 @@ import pl.maciek.squashscoreboard.lootbox.RewardCatalog;
 public class MainActivity extends Activity {
     private UiTheme theme;
     private int background, surface, foreground, muted, playerOneColor, playerTwoColor, remoteOne, remoteTwo, remoteUndo, remoteReset;
-    private boolean darkTheme, highContrast, paused;
+    private boolean darkTheme, highContrast, paused, awaitingNextGame;
     private final MatchState match = new MatchState();
     private String playerOneName = "PLAYER 1", playerTwoName = "PLAYER 2", playerOneProfileId, playerTwoProfileId;
     private long currentMatchId, matchElapsedMs, currentSetElapsedMs, lastClockMs;
@@ -100,7 +100,22 @@ public class MainActivity extends Activity {
         createMediaSession();
         Handler mainLoopHandler = new Handler(Looper.getMainLooper());
         watchCommandServer = new WatchCommandServer(mainLoopHandler, this::handleWatchCommand);
-        bluetoothWatchServer = new BluetoothWatchServer(this, mainLoopHandler, this::handleWatchCommand);
+        bluetoothWatchServer = new BluetoothWatchServer(
+            this,
+            mainLoopHandler,
+            this::handleWatchCommand,
+            new BluetoothWatchServer.StateProvider() {
+                @Override
+                public String buildStateJsonLine() {
+                    return buildWatchStateLine();
+                }
+
+                @Override
+                public boolean isGameOrMatchBall() {
+                    return match.isGameOrMatchBall();
+                }
+            }
+        );
         refreshScreen();
         if (getIntent() != null && getIntent().getBooleanExtra(UiTheme.EXTRA_OPEN_SETTINGS, false)) {
             getIntent().removeExtra(UiTheme.EXTRA_OPEN_SETTINGS);
@@ -161,6 +176,14 @@ public class MainActivity extends Activity {
     private void syncSelectedProfiles() {
         PlayerProfile one = ProfileStore.find(this, playerOneProfileId);
         PlayerProfile two = ProfileStore.find(this, playerTwoProfileId);
+        if (one == null && playerOneName != null) {
+            one = ProfileStore.findByName(this, playerOneName);
+            if (one != null) playerOneProfileId = one.id;
+        }
+        if (two == null && playerTwoName != null) {
+            two = ProfileStore.findByName(this, playerTwoName);
+            if (two != null) playerTwoProfileId = two.id;
+        }
         boolean changed = false;
         if (one != null && (!one.name.equals(playerOneName) || one.color != playerOneColor)) {
             playerOneName = one.name;
@@ -875,6 +898,26 @@ public class MainActivity extends Activity {
             refreshScreen();
             return true;
         }
+        if ("TOGGLE_PAUSE".equals(command)) {
+            if (match.isMatchFinished()) {
+                resetMatchSafely();
+                return true;
+            }
+            if (awaitingNextGame) {
+                awaitingNextGame = false;
+                resumeMatch();
+                refreshScreen();
+                return true;
+            }
+            togglePause();
+            return true;
+        }
+        if ("TOGGLE_SIDE".equals(command)) {
+            if (match.isMatchFinished()) return false;
+            match.toggleServiceSide();
+            refreshScreen();
+            return true;
+        }
         if ("RESET".equals(command)) {
             resetMatchSafely();
             return true;
@@ -882,8 +925,45 @@ public class MainActivity extends Activity {
         return false;
     }
 
+    private String computeWatchActionLabel() {
+        if (awaitingNextGame && !match.isMatchFinished()) {
+            return "NEXT";
+        }
+        if (match.isMatchFinished() || paused) {
+            return "START";
+        }
+        return "STOP";
+    }
+
+    private String buildWatchStateLine() {
+        boolean p1Rainbow = playerOneColor == BluetoothWatchServer.RAINBOW_COLOR_KEY;
+        boolean p2Rainbow = playerTwoColor == BluetoothWatchServer.RAINBOW_COLOR_KEY;
+        int c1 = theme != null ? theme.playerPanelFill(playerOneColor) : playerOneColor;
+        int c2 = theme != null ? theme.playerPanelFill(playerTwoColor) : playerTwoColor;
+        return BluetoothWatchServer.buildStateJsonLine(
+            playerOneName,
+            playerTwoName,
+            match.getPlayerOnePoints(),
+            match.getPlayerTwoPoints(),
+            match.getPlayerOneSets(),
+            match.getPlayerTwoSets(),
+            match.getSetsToWinMatch(),
+            match.getActiveServer(),
+            match.getServiceSide(),
+            c1,
+            p1Rainbow,
+            c2,
+            p2Rainbow,
+            computeWatchActionLabel(),
+            match.isGameOrMatchBall(),
+            match.isMatchFinished(),
+            paused
+        );
+    }
+
     private void addPoint(int player) {
         if (paused || match.isMatchFinished()) return;
+        awaitingNextGame = false;
         tickClock();
         int oldSets = match.getPlayerOneSets() + match.getPlayerTwoSets();
         match.addPoint(player);
@@ -892,10 +972,13 @@ public class MainActivity extends Activity {
             setDurationsMs.add(currentSetElapsedMs);
             currentSetElapsedMs = 0;
             if (!match.isMatchFinished()) {
+                awaitingNextGame = true;
+                pauseMatch();
                 archiveCurrentMatch();
             }
         }
         if (match.isMatchFinished()) {
+            awaitingNextGame = false;
             pauseMatch();
             archiveCurrentMatch();
             showMatchFinished();
@@ -906,6 +989,7 @@ public class MainActivity extends Activity {
     private void restoreSetAfterUndo(int before) {
         if (match.getPlayerOneSets() + match.getPlayerTwoSets() < before && !setDurationsMs.isEmpty()) {
             currentSetElapsedMs = setDurationsMs.remove(setDurationsMs.size() - 1);
+            awaitingNextGame = false;
         }
         while (pointTimesMs.size() > match.getPointWinners().size()) {
             pointTimesMs.remove(pointTimesMs.size() - 1);
@@ -914,6 +998,7 @@ public class MainActivity extends Activity {
 
     private void togglePause() {
         if (match.isMatchFinished()) return;
+        awaitingNextGame = false;
         if (paused) resumeMatch(); else pauseMatch();
         refreshScreen();
     }
@@ -924,6 +1009,7 @@ public class MainActivity extends Activity {
     }
 
     private void resetClock() {
+        awaitingNextGame = false;
         matchElapsedMs = 0;
         currentSetElapsedMs = 0;
         setDurationsMs.clear();
@@ -1032,6 +1118,9 @@ public class MainActivity extends Activity {
         if (bottomNav != null) {
             bottomNav.setPinned(paused && !match.isMatchFinished());
             if (finishedOverlay == null) bottomNav.bringToFront();
+        }
+        if (bluetoothWatchServer != null) {
+            bluetoothWatchServer.broadcastStateAsync(buildWatchStateLine());
         }
     }
 
@@ -1356,9 +1445,14 @@ public class MainActivity extends Activity {
     }
 
     private void showMatchFinished() {
+        String winnerName = match.getWinner() == 1 ? playerOneName : playerTwoName;
+        String finalScore = match.getPlayerOneSets() + " - " + match.getPlayerTwoSets();
+        if (bluetoothWatchServer != null) {
+            bluetoothWatchServer.broadcastMatchEndedAsync(winnerName, finalScore);
+        }
         finishedOverlay = new MatchFinishedView(
             this,
-            match.getWinner() == 1 ? playerOneName : playerTwoName,
+            winnerName,
             () -> {
                 finishedOverlay = null;
                 match.reset();
