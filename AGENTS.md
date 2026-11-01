@@ -28,12 +28,16 @@ The user count is small (2 players). Do not add cloud services, accounts, or ana
 DropShot/
 ├── AGENTS.md                  ← this file (global rules)
 ├── Makefile                   ← build, install, emulator tasks
-├── docs/agents/               ← detailed standards (read on demand)
-│   ├── security.md            ← OWASP Top 10, OWASP MASVS / MASTG, ASVS
+├── docs/agents/               ← detailed standards (read before changing code)
+│   ├── architecture.md        ← activity hierarchy, Single Hub pattern, navigation bar
+│   ├── caveats.md             ← known problems and traps (READ THIS FIRST)
+│   ├── cloud-sync.md          ← Supabase PostgREST sync, tokens, database schema
 │   ├── coding-standards.md    ← Java, architecture, performance, tests
-│   ├── ui-ux.md               ← Material Design 3, WCAG 2.2 AA, UI text
+│   ├── development-guide.md   ← step-by-step developer guide for agents
+│   ├── security.md            ← OWASP Top 10, OWASP MASVS / MASTG, ASVS
 │   ├── ste-writing.md         ← ASD-STE100 rules for all text
-│   └── caveats.md             ← known problems and traps (READ THIS)
+│   ├── ui-ux.md               ← Material Design 3, WCAG 2.2 AA, UI text
+│   └── watch-ecosystem.md     ← Zepp OS and AndroidWatch companions, protocol
 ├── .agents/skills/            ← step-by-step procedures for agents
 ├── Android/
 │   ├── AGENTS.md              ← Android rules
@@ -86,14 +90,21 @@ The UI uses the squash term "game". Code names such as `pointsToWinSet` keep the
 
 ## 5. Mandatory engineering standards
 
-Each task must obey these standards. Read the linked file before you change the related code.
+Each task must obey these standards.
+
+> [!IMPORTANT]
+> You MUST read the relevant files in `docs/agents/` before you design or change code.
 
 | Area | Standard | File |
 |---|---|---|
-| Security | OWASP Top 10 (2021), OWASP Mobile Top 10 (2024), OWASP MASVS v2 and MASTG, OWASP ASVS 4.0.3 | [docs/agents/security.md](docs/agents/security.md) |
-| Code and logic | Clean code, SOLID, fail-safe defaults, deterministic state, no main-thread I/O | [docs/agents/coding-standards.md](docs/agents/coding-standards.md) |
-| Performance | 60/120 Hz frame budget, no allocation in `onDraw`, cache reads, async writes | [docs/agents/coding-standards.md](docs/agents/coding-standards.md#5-performance) |
-| UI and UX | Material Design 3, WCAG 2.2 AA, 48 dp touch targets, design tokens | [docs/agents/ui-ux.md](docs/agents/ui-ux.md) |
+| Development guide | Environment, sandbox rules, UI rules, definition of done | [docs/agents/development-guide.md](docs/agents/development-guide.md) |
+| Architecture | Single Hub pattern, activity hierarchy, navigation bar | [docs/agents/architecture.md](docs/agents/architecture.md) |
+| Cloud sync | Supabase REST sync, token auth, background push | [docs/agents/cloud-sync.md](docs/agents/cloud-sync.md) |
+| Watch ecosystem | Zepp OS and AndroidWatch remotes, protocol, 75/25 layout | [docs/agents/watch-ecosystem.md](docs/agents/watch-ecosystem.md) |
+| Security | OWASP Top 10 (2021), OWASP Mobile Top 10 (2024), MASVS v2 | [docs/agents/security.md](docs/agents/security.md) |
+| Code and logic | Clean code, SOLID, fail-safe defaults, deterministic state | [docs/agents/coding-standards.md](docs/agents/coding-standards.md) |
+| Performance | 60/120 Hz frame budget, no allocation in `onDraw`, cache reads | [docs/agents/coding-standards.md](docs/agents/coding-standards.md#5-performance) |
+| UI and UX | Material Design 3, WCAG 2.2 AA, 48 dp touch targets | [docs/agents/ui-ux.md](docs/agents/ui-ux.md) |
 | Text | ASD-STE100 | [docs/agents/ste-writing.md](docs/agents/ste-writing.md) |
 
 ### 5.1 Rules that protect the score (do not change)
@@ -122,7 +133,7 @@ These behaviors keep the score correct. Do not change them without an explicit r
 
 ## 6. Workflow for each task
 
-1. Read this file, the subdirectory `AGENTS.md`, and [docs/agents/caveats.md](docs/agents/caveats.md).
+1. Read this file, the subdirectory `AGENTS.md`, and the relevant files in `docs/agents/` (especially `caveats.md` and `development-guide.md`).
 2. Read the code that you will change, and the code that calls it. Do not guess an API.
 3. Make the smallest change that completes the task. Keep the current code style.
 4. Keep the existing comments and Javadoc. Update them if the behavior changes.
@@ -165,7 +176,7 @@ See the skill [.agents/skills/release-version-bump](.agents/skills/release-versi
 
 Read [docs/agents/caveats.md](docs/agents/caveats.md) for the full list. The most important items:
 
-1. `ProfileStore` contains `TEMPORARY` seed code. It creates "Kacper" and "Łukasz" with the rainbow color at each cold start.
+1. Player secret token hashing uses unsalted SHA-256. Weak tokens can be cracked offline.
 2. The watch bridge token check is off. `setExpectedToken` is never called, and the watch sends no token.
 3. The lootbox "authoritative" service runs on the device. It is not a server. A rooted device can change rewards.
 4. If the AndroidKeyStore key is lost, the encrypted data cannot be read. The app then starts with empty data.

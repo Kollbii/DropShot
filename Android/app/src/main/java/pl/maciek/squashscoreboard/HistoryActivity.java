@@ -15,6 +15,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -23,55 +24,151 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * Unified Hub Activity hosting both Match History and Player Statistics pages.
+ * Switching tabs toggles view visibility in-place, eliminating inter-activity flicker.
+ */
 public class HistoryActivity extends Activity {
+    public static final String EXTRA_ACTIVE_TAB = "activeTab";
+
     private static final int FILTER_ALL = 0;
     private static final int FILTER_FINISHED = 1;
     private static final int FILTER_UNFINISHED = 2;
 
     private UiTheme theme;
+    private int activeTab = UiTheme.TAB_HISTORY;
     private int activeFilter = FILTER_ALL;
     private String searchQuery = "";
     private LinearLayout listContainer;
     private Button chipAll, chipFinished, chipUnfinished;
-    private UiTheme.CollapsibleBottomNav bottomNav;
+    private LinearLayout historyContainer;
+    private PlayersPageView playersPageView;
+    private UiTheme.BottomNavBar bottomNav;
 
     @Override public void onUserInteraction() {
         super.onUserInteraction();
-        if (bottomNav != null) bottomNav.onUserInteraction();
+    }
+
+    @Override
+    public void onBackPressed() {
+        finish();
+        overridePendingTransition(0, 0);
     }
 
     @Override
     public void onCreate(Bundle state) {
         super.onCreate(state);
-        showRecords();
+        if (getIntent() != null && getIntent().hasExtra(EXTRA_ACTIVE_TAB)) {
+            activeTab = getIntent().getIntExtra(EXTRA_ACTIVE_TAB, UiTheme.TAB_HISTORY);
+        }
+        drawHub();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (intent != null && intent.hasExtra(EXTRA_ACTIVE_TAB)) {
+            selectTab(intent.getIntExtra(EXTRA_ACTIVE_TAB, UiTheme.TAB_HISTORY));
+        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        showRecords();
+        refreshCurrentTab();
     }
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        showRecords();
+        drawHub();
     }
 
-    private void showRecords() {
+    public void selectTab(int tab) {
+        this.activeTab = tab;
+        if (historyContainer != null) {
+            historyContainer.setVisibility(tab == UiTheme.TAB_HISTORY ? View.VISIBLE : View.GONE);
+        }
+        if (playersPageView != null) {
+            playersPageView.setVisibility(tab == UiTheme.TAB_PLAYERS ? View.VISIBLE : View.GONE);
+        }
+        if (bottomNav != null) {
+            bottomNav.setActiveTab(tab);
+        }
+        refreshCurrentTab();
+    }
+
+    private void handleBottomNavTab(int tab) {
+        if (tab == UiTheme.TAB_MATCH) {
+            finish();
+            overridePendingTransition(0, 0);
+        } else if (tab == UiTheme.TAB_HISTORY || tab == UiTheme.TAB_PLAYERS) {
+            selectTab(tab);
+        } else if (tab == UiTheme.TAB_SETTINGS) {
+            SettingsDialog.show(this, 0, this::refreshCurrentTab);
+        }
+    }
+
+    private void refreshCurrentTab() {
+        if (activeTab == UiTheme.TAB_HISTORY) {
+            updateChipStyles();
+            populateList();
+        } else if (activeTab == UiTheme.TAB_PLAYERS && playersPageView != null) {
+            playersPageView.refresh();
+        }
+    }
+
+    private void drawHub() {
         theme = new UiTheme(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(12), dp(16), dp(8));
         root.setBackgroundColor(theme.background);
+
+        FrameLayout container = new FrameLayout(this);
+
+        // Build History Page View
+        historyContainer = buildHistoryView();
+        container.addView(historyContainer, new FrameLayout.LayoutParams(-1, -1));
+
+        // Build Players Page View
+        playersPageView = new PlayersPageView(this, theme, () -> {
+            finish();
+            overridePendingTransition(0, 0);
+        });
+        container.addView(playersPageView, new FrameLayout.LayoutParams(-1, -1));
+
+        root.addView(container, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        // Bottom Navigation Bar
+        bottomNav = theme.createBottomNavBar(
+            this,
+            activeTab,
+            this::handleBottomNavTab,
+            () -> SettingsDialog.show(this, 0, this::refreshCurrentTab)
+        );
+        root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(56)));
+
+        setContentView(root);
+        selectTab(activeTab);
+    }
+
+    private LinearLayout buildHistoryView() {
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setPadding(dp(16), dp(12), dp(16), dp(8));
+        page.setBackgroundColor(theme.background);
 
         // Top App Bar
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
 
         Button back = theme.outlinedButton(this, "← Go back");
-        back.setContentDescription("Go back.");
-        back.setOnClickListener(v -> finish());
+        back.setContentDescription("Go back to scoreboard.");
+        back.setOnClickListener(v -> {
+            finish();
+            overridePendingTransition(0, 0);
+        });
 
         TextView title = text("Match history", 24, theme.onSurface);
         title.setTypeface(Typeface.DEFAULT_BOLD);
@@ -79,12 +176,12 @@ public class HistoryActivity extends Activity {
         title.setPadding(dp(16), 0, dp(16), 0);
 
         Button playersBtn = theme.tonalButton(this, "Open players");
-        playersBtn.setOnClickListener(v -> startActivity(new Intent(this, PlayerStatsActivity.class)));
+        playersBtn.setOnClickListener(v -> selectTab(UiTheme.TAB_PLAYERS));
 
         header.addView(back, new LinearLayout.LayoutParams(-2, dp(48)));
         header.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1));
         header.addView(playersBtn, new LinearLayout.LayoutParams(-2, dp(48)));
-        root.addView(header, new LinearLayout.LayoutParams(-1, dp(52)));
+        page.addView(header, new LinearLayout.LayoutParams(-1, dp(52)));
 
         // Search and Filter Bar
         LinearLayout filterBar = new LinearLayout(this);
@@ -127,22 +224,16 @@ public class HistoryActivity extends Activity {
         filterBar.addView(chipAll, chipParams());
         filterBar.addView(chipFinished, chipParams());
         filterBar.addView(chipUnfinished, chipParams());
-        root.addView(filterBar, new LinearLayout.LayoutParams(-1, dp(64)));
+        page.addView(filterBar, new LinearLayout.LayoutParams(-1, dp(64)));
 
         // Match List
         listContainer = new LinearLayout(this);
         listContainer.setOrientation(LinearLayout.VERTICAL);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(listContainer);
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        // Bottom Navigation Bar
-        bottomNav = theme.createCollapsibleBottomNav(this, UiTheme.TAB_HISTORY, null);
-        root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(56)));
-
-        updateChipStyles();
-        populateList();
-        setContentView(root);
+        return page;
     }
 
     private LinearLayout.LayoutParams chipParams() {
@@ -215,7 +306,10 @@ public class HistoryActivity extends Activity {
             emptyDesc.setPadding(0, dp(8), 0, dp(16));
 
             Button openMatch = theme.primaryButton(this, "Open match screen");
-            openMatch.setOnClickListener(v -> finish());
+            openMatch.setOnClickListener(v -> {
+                finish();
+                overridePendingTransition(0, 0);
+            });
 
             emptyBox.addView(emptyTitle);
             emptyBox.addView(emptyDesc);
@@ -290,7 +384,6 @@ public class HistoryActivity extends Activity {
         infoCol.addView(meta);
         row.addView(infoCol, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        // 2-tap direct Resume button on unfinished matches!
         if (!record.finished) {
             Button resumeBtn = theme.primaryButton(this, "Resume match");
             LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(-2, dp(48));

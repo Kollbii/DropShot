@@ -18,6 +18,10 @@ There is no active temporary code.
 | S3 | `LootboxAuthoritativeService` runs on the device. A rooted device or a modified APK can unlock rewards. Rewards are cosmetic only. | Low |
 | S4 | `AppPreferences` (theme, rules, keys, court timer, last player colors) is not encrypted. It contains no personal data now. Do not add personal data to it. | Low |
 | S5 | The release build has no signing configuration in `build.gradle`. The debug key signs the APK copies. | Medium |
+| S6 | Player secret token hashing uses unsalted single-round SHA-256. Weak tokens are susceptible to offline dictionary cracking and collision overwrites. | High |
+| S7 | Career statistics and unlocked rewards are calculated client-side and written directly to Supabase without backend verification. | Medium |
+| S8 | If a player uses a 64-character hex secret token, `CloudConfigStore` bypasses hashing and transmits the raw secret token. | Medium |
+| S9 | `SupabaseSyncClient` caps responses at 512 KB (`MAX_RESPONSE_BYTES`). Pulling 100 large matches can trigger an `IOException` and halt cloud pull. | Low |
 
 ## 3. Data and storage
 
