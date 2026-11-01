@@ -182,7 +182,72 @@ The table compares the 5 interaction ideas:
 
 ---
 
-## 4. Evaluation Summary and Next Steps
+## 4. Application Exit and Swipe-to-Dismiss Gesture Ideas
+
+The standard Wear OS gesture to exit an application is a horizontal swipe from the left screen edge to the right.
+During rapid squash play, accidental swipes or drags must not register points, undo actions, or unintentional exits.
+
+The table summarizes the 4 design options:
+
+| Idea | Concept | Status | Point Safety |
+|---|---|---|---|
+| **Idea A** | Edge-Swipe in `dispatchTouchEvent` + Touch Slop | **Implemented** | High (cancels buttons on drag) |
+| **Idea B** | Wear OS `SwipeDismissFrameLayout` | Proposed | Medium (requires wearable support lib) |
+| **Idea C** | Safe Tap Validation + System Back Gesture | Proposed | Medium (fullscreen flags can disable) |
+| **Idea D** | Dedicated Exit Gesture / Match-Safe Lock | Proposed | High (differs from Wear OS convention) |
+
+### 4.1 Idea A: Edge-Swipe in `dispatchTouchEvent` + Touch Slop (Implemented)
+
+* **Description**:
+  1. Any touch that starts within 36 dp of the left edge and moves right by at least 70 dp (`dx >= 70 dp && dx > 1.5 * dy`) triggers an exit swipe.
+  2. The activity dispatches `ACTION_CANCEL` to all child tiles, clearing any pressed states or timers.
+  3. Releasing the finger calls `finish()` to exit gracefully back to the watch face.
+  4. All button touch listeners verify touch displacement against `touchSlop` (minimum 8 dp). Any drag or brush movement cancels button execution.
+  5. The `UNDO` button vibration moves from touch down to a confirmed touch release.
+* **Advantages**:
+  * Prevents accidental points or undo commands when swiping to exit.
+  * Zero extra dependencies; compatible with Android API 20 to 22 (LG-W100).
+  * Completely eliminates phantom points caused by finger drags or clothing brushes.
+* **Disadvantages**:
+  * Screen closes on finger release without a live slide-out window preview.
+
+---
+
+### 4.2 Idea B: Wear OS `SwipeDismissFrameLayout` (Proposed)
+
+* **Description**:
+  Wraps the root view in Wear OS `SwipeDismissFrameLayout`.
+* **Advantages**:
+  * Displays a live window slide-out animation to show the watch face during the drag.
+* **Disadvantages**:
+  * Requires legacy wearable support dependencies.
+  * Child touch listeners still require manual touch slop filtering.
+
+---
+
+### 4.3 Idea C: Safe Tap Validation + System Back Gesture (Proposed)
+
+* **Description**:
+  Filters touch slop inside button touch listeners and relies on system `windowSwipeToDismiss`.
+* **Advantages**:
+  * Minimal code change.
+* **Disadvantages**:
+  * Fullscreen flags (`FLAG_FULLSCREEN`) can disable window swipe-to-dismiss on Wear OS 1.x.
+
+---
+
+### 4.4 Idea D: Dedicated Exit Gesture / Match-Safe Lock (Proposed)
+
+* **Description**:
+  Requires a long-press on the top status dot or blocks swipe-to-exit while a match is in progress.
+* **Advantages**:
+  * Zero risk of exiting the application mid-rally.
+* **Disadvantages**:
+  * Breaks standard Wear OS swipe-to-dismiss navigation expectations.
+
+---
+
+## 5. Evaluation Summary and Next Steps
 
 1. **Connection indicator**:
    Idea 1 (Micro Dot) provides the best balance between clean layout and WCAG touch target compliance.
@@ -191,4 +256,8 @@ The table compares the 5 interaction ideas:
 2. **Service side selection**:
    Idea D (1-Second Hold) is currently active and protects against accidental taps.
    Field testing during active squash matches will verify if the 1.0 second duration is optimal or if 0.8 seconds is faster and safe.
+
+3. **Application exit**:
+   Idea A (Edge-Swipe in `dispatchTouchEvent` + Touch Slop) is active. It ensures reliable left-edge exit gestures while filtering out accidental drags on scoring tiles and buttons.
+
 

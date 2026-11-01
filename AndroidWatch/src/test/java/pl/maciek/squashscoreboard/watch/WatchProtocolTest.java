@@ -118,4 +118,18 @@ public final class WatchProtocolTest {
         assertNull(WatchProtocol.getGradientStops(0xFF3184FF, false));
         assertNull(WatchProtocol.getGradientStops(0xFFF45C5C, false));
     }
+
+    @Test
+    public void detectsEdgeSwipeExitAccurately() {
+        assertTrue(WatchProtocol.isEdgeSwipeExit(20f, 95f, 50f, 55f, 36f, 70f));
+        assertFalse(WatchProtocol.isEdgeSwipeExit(40f, 120f, 50f, 55f, 36f, 70f));
+        assertFalse(WatchProtocol.isEdgeSwipeExit(20f, 70f, 50f, 55f, 36f, 70f));
+        assertFalse(WatchProtocol.isEdgeSwipeExit(20f, 95f, 50f, 110f, 36f, 70f));
+    }
+
+    @Test
+    public void detectsTouchMovementExceededAccurately() {
+        assertFalse(WatchProtocol.isTouchMovementExceeded(10f, 12f, 20f, 22f, 8f));
+        assertTrue(WatchProtocol.isTouchMovementExceeded(10f, 20f, 20f, 20f, 8f));
+    }
 }

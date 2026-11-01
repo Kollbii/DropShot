@@ -337,4 +337,39 @@ public final class WatchProtocol {
         if (json.startsWith("false", start)) return false;
         return fallback;
     }
+
+    /**
+     * Determines if a touch gesture is a left-edge swipe to exit.
+     * The touch must start near the left edge and move right.
+     */
+    public static boolean isEdgeSwipeExit(
+        float startX,
+        float currentX,
+        float startY,
+        float currentY,
+        float maxStartPx,
+        float minDistancePx
+    ) {
+        if (startX > maxStartPx) {
+            return false;
+        }
+        float dx = currentX - startX;
+        float dy = Math.abs(currentY - startY);
+        return dx >= minDistancePx && dx > (1.5f * dy);
+    }
+
+    /**
+     * Determines if touch movement exceeds the touch slop limit.
+     */
+    public static boolean isTouchMovementExceeded(
+        float startX,
+        float currentX,
+        float startY,
+        float currentY,
+        float slopPx
+    ) {
+        float dx = currentX - startX;
+        float dy = currentY - startY;
+        return (dx * dx + dy * dy) > (slopPx * slopPx);
+    }
 }

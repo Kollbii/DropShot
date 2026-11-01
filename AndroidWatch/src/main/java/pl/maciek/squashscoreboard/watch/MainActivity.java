@@ -16,6 +16,7 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
@@ -61,6 +62,9 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
     private static final long SIDE_SWITCH_SHOW_TEXT_DELAY_MS = 200L;
     private static final long SIDE_SWITCH_GRACE_DURATION_MS = 1500L;
 
+    private static final int EDGE_SWIPE_MAX_START_DP = 36;
+    private static final int SWIPE_EXIT_MIN_DX_DP = 70;
+
     private static final long VIBRATE_POINT_MS = 35L;
     private static final long[] VIBRATE_DOUBLE_HAPTIC = new long[]{0L, 30L, 45L, 30L};
     private static final long[] VIBRATE_BALL_EXTRA_PATTERN = new long[]{200L, 150L};
@@ -92,6 +96,13 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
     private long sideSwitchGraceUntilUptimeMs;
     private Runnable sideSwitchVisualRunnable;
     private Runnable sideSwitchHoldRunnable;
+
+    // Edge-swipe exit and touch slop
+    private int touchSlopPx;
+    private boolean isEdgeSwipeCandidate;
+    private boolean isExitSwiping;
+    private float edgeSwipeDownX;
+    private float edgeSwipeDownY;
 
     // Bottom buttons
     private TextView undoButtonView;
@@ -134,6 +145,7 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
                 | WindowManager.LayoutParams.FLAG_FULLSCREEN
         );
         setWindowBrightness(ACTIVE_PLAY_BRIGHTNESS);
+        touchSlopPx = Math.max(ViewConfiguration.get(this).getScaledTouchSlop(), dp(8));
 
         vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
         watchClient = new BluetoothWatchClient(mainHandler, this);
@@ -183,11 +195,62 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        if (ev != null && ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+        if (ev == null) {
+            return false;
+        }
+
+        int action = ev.getActionMasked();
+
+        if (action == MotionEvent.ACTION_DOWN) {
+            edgeSwipeDownX = ev.getRawX();
+            edgeSwipeDownY = ev.getRawY();
+            isEdgeSwipeCandidate = edgeSwipeDownX <= dp(EDGE_SWIPE_MAX_START_DP);
+            isExitSwiping = false;
+
             if (watchClient != null && !watchClient.isConnected()) {
                 watchClient.requestReconnectNow();
             }
+        } else if (action == MotionEvent.ACTION_MOVE) {
+            if (isEdgeSwipeCandidate) {
+                boolean isExit = WatchProtocol.isEdgeSwipeExit(
+                    edgeSwipeDownX,
+                    ev.getRawX(),
+                    edgeSwipeDownY,
+                    ev.getRawY(),
+                    dp(EDGE_SWIPE_MAX_START_DP),
+                    dp(SWIPE_EXIT_MIN_DX_DP)
+                );
+                if (isExit) {
+                    if (!isExitSwiping) {
+                        isExitSwiping = true;
+                        MotionEvent cancelEvent = MotionEvent.obtain(ev);
+                        cancelEvent.setAction(MotionEvent.ACTION_CANCEL);
+                        super.dispatchTouchEvent(cancelEvent);
+                        cancelEvent.recycle();
+                    }
+                    return true;
+                }
+            }
+        } else if (action == MotionEvent.ACTION_UP) {
+            if (isExitSwiping) {
+                boolean confirmed = (ev.getRawX() - edgeSwipeDownX) >= dp(SWIPE_EXIT_MIN_DX_DP);
+                isExitSwiping = false;
+                isEdgeSwipeCandidate = false;
+                if (confirmed) {
+                    finish();
+                }
+                return true;
+            }
+            isEdgeSwipeCandidate = false;
+        } else if (action == MotionEvent.ACTION_CANCEL) {
+            isExitSwiping = false;
+            isEdgeSwipeCandidate = false;
         }
+
+        if (isExitSwiping) {
+            return true;
+        }
+
         return super.dispatchTouchEvent(ev);
     }
 
@@ -392,6 +455,9 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         ));
 
         final String command = playerNumber == 1 ? WatchProtocol.CMD_POINT_1 : WatchProtocol.CMD_POINT_2;
+        final float[] downCoords = new float[2];
+        final boolean[] dragDetected = new boolean[1];
+
         tile.setOnTouchListener((v, event) -> {
             int action = event.getActionMasked();
             long now = SystemClock.uptimeMillis();
@@ -402,6 +468,9 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
                 return true;
             }
             if (action == MotionEvent.ACTION_DOWN) {
+                downCoords[0] = event.getX();
+                downCoords[1] = event.getY();
+                dragDetected[0] = false;
                 v.setAlpha(0.82f);
                 if (playerNumber == currentState.activeServer) {
                     sideSwitchTriggered = false;
@@ -452,6 +521,27 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
                     mainHandler.postDelayed(sideSwitchHoldRunnable, SIDE_SWITCH_HOLD_DURATION_MS);
                 }
                 return true;
+            } else if (action == MotionEvent.ACTION_MOVE) {
+                if (!dragDetected[0]) {
+                    if (WatchProtocol.isTouchMovementExceeded(downCoords[0], event.getX(), downCoords[1], event.getY(), touchSlopPx)) {
+                        dragDetected[0] = true;
+                        v.setAlpha(1.0f);
+                        if (playerNumber == currentState.activeServer) {
+                            if (sideSwitchVisualRunnable != null) {
+                                mainHandler.removeCallbacks(sideSwitchVisualRunnable);
+                                sideSwitchVisualRunnable = null;
+                            }
+                            if (sideSwitchHoldRunnable != null) {
+                                mainHandler.removeCallbacks(sideSwitchHoldRunnable);
+                                sideSwitchHoldRunnable = null;
+                            }
+                            serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+                            serviceSideView.setTextColor(Color.WHITE);
+                            serviceSideView.setText("[" + currentState.serviceSide + "]");
+                        }
+                    }
+                }
+                return true;
             } else if (action == MotionEvent.ACTION_UP) {
                 v.setAlpha(1.0f);
                 if (playerNumber == currentState.activeServer) {
@@ -475,13 +565,16 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
                     serviceSideView.setTextColor(Color.WHITE);
                     serviceSideView.setText("[" + currentState.serviceSide + "]");
                 }
-                if (watchClient != null) {
-                    watchClient.sendCommand(command);
+                if (!dragDetected[0]) {
+                    if (watchClient != null) {
+                        watchClient.sendCommand(command);
+                    }
+                    vibrateOnce(VIBRATE_POINT_MS);
                 }
-                vibrateOnce(VIBRATE_POINT_MS);
                 return true;
             } else if (action == MotionEvent.ACTION_CANCEL) {
                 v.setAlpha(1.0f);
+                dragDetected[0] = false;
                 if (playerNumber == currentState.activeServer) {
                     if (sideSwitchVisualRunnable != null) {
                         mainHandler.removeCallbacks(sideSwitchVisualRunnable);
@@ -519,19 +612,36 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         undoButtonView.setClickable(true);
         undoButtonView.setFocusable(true);
 
+        final float[] undoDownCoords = new float[2];
+        final boolean[] undoDragDetected = new boolean[1];
+
         undoButtonView.setOnTouchListener((v, event) -> {
             int action = event.getActionMasked();
             if (action == MotionEvent.ACTION_DOWN) {
+                undoDownCoords[0] = event.getX();
+                undoDownCoords[1] = event.getY();
+                undoDragDetected[0] = false;
                 undoButtonBg.setColor(UNDO_PRESSED);
-                vibrateOnce(VIBRATE_UNDO_MS);
+                return true;
+            } else if (action == MotionEvent.ACTION_MOVE) {
+                if (!undoDragDetected[0]) {
+                    if (WatchProtocol.isTouchMovementExceeded(undoDownCoords[0], event.getX(), undoDownCoords[1], event.getY(), touchSlopPx)) {
+                        undoDragDetected[0] = true;
+                        undoButtonBg.setColor(UNDO_NORMAL);
+                    }
+                }
                 return true;
             } else if (action == MotionEvent.ACTION_UP) {
                 undoButtonBg.setColor(UNDO_NORMAL);
-                if (watchClient != null) {
-                    watchClient.sendCommand(WatchProtocol.CMD_UNDO);
+                if (!undoDragDetected[0]) {
+                    vibrateOnce(VIBRATE_UNDO_MS);
+                    if (watchClient != null) {
+                        watchClient.sendCommand(WatchProtocol.CMD_UNDO);
+                    }
                 }
                 return true;
             } else if (action == MotionEvent.ACTION_CANCEL) {
+                undoDragDetected[0] = false;
                 undoButtonBg.setColor(UNDO_NORMAL);
                 return true;
             }
@@ -553,24 +663,43 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         actionButtonView.setClickable(true);
         actionButtonView.setFocusable(true);
 
+        final float[] actionDownCoords = new float[2];
+        final boolean[] actionDragDetected = new boolean[1];
+
         actionButtonView.setOnTouchListener((v, event) -> {
             int action = event.getActionMasked();
             if (action == MotionEvent.ACTION_DOWN) {
+                actionDownCoords[0] = event.getX();
+                actionDownCoords[1] = event.getY();
+                actionDragDetected[0] = false;
                 resetHoldTriggered = false;
                 actionButtonBg.setColor(ACTION_PRESSED);
-                vibrateOnce(VIBRATE_ACTION_MS);
                 mainHandler.postDelayed(showHoldTextRunnable, SHOW_HOLD_TEXT_DELAY_MS);
                 mainHandler.postDelayed(resetHoldRunnable, RESET_HOLD_DURATION_MS);
+                return true;
+            } else if (action == MotionEvent.ACTION_MOVE) {
+                if (!actionDragDetected[0]) {
+                    if (WatchProtocol.isTouchMovementExceeded(actionDownCoords[0], event.getX(), actionDownCoords[1], event.getY(), touchSlopPx)) {
+                        actionDragDetected[0] = true;
+                        mainHandler.removeCallbacks(showHoldTextRunnable);
+                        mainHandler.removeCallbacks(resetHoldRunnable);
+                        updateActionButtonStyle(currentState.actionLabel);
+                    }
+                }
                 return true;
             } else if (action == MotionEvent.ACTION_UP) {
                 mainHandler.removeCallbacks(showHoldTextRunnable);
                 mainHandler.removeCallbacks(resetHoldRunnable);
                 updateActionButtonStyle(currentState.actionLabel);
-                if (!resetHoldTriggered && watchClient != null) {
-                    watchClient.sendCommand(WatchProtocol.CMD_TOGGLE_PAUSE);
+                if (!actionDragDetected[0] && !resetHoldTriggered) {
+                    vibrateOnce(VIBRATE_ACTION_MS);
+                    if (watchClient != null) {
+                        watchClient.sendCommand(WatchProtocol.CMD_TOGGLE_PAUSE);
+                    }
                 }
                 return true;
             } else if (action == MotionEvent.ACTION_CANCEL) {
+                actionDragDetected[0] = false;
                 mainHandler.removeCallbacks(showHoldTextRunnable);
                 mainHandler.removeCallbacks(resetHoldRunnable);
                 updateActionButtonStyle(currentState.actionLabel);
