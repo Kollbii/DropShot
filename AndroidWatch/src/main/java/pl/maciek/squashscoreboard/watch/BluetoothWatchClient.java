@@ -14,46 +14,57 @@ import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Bluetooth RFCOMM client for the LG G Watch (API 20-22).
  * - Connects to the paired phone running DropShot (pl.maciek.squashscoreboard).
- * - Automatically reconnects in the background when the Bluetooth connection drops.
+ * - Keeps a single persistent RFCOMM socket open during the session with a blocking reader loop
+ *   (no polling loop while connected).
+ * - Uses exponential backoff (3 s, 5 s, 10 s) when disconnected, or reconnects immediately on screen touch.
  * - Never retries, queues, or replays a score command after a failure (prevents late points).
  */
 public final class BluetoothWatchClient {
     private static final String TAG = "DropShotWatchBT";
-    private static final long RECONNECT_DELAY_MS = 2500L;
+    public static final long[] BACKOFF_DELAYS_MS = new long[]{3000L, 5000L, 10000L};
 
-    public interface ConnectionListener {
+    public interface ClientListener {
         void onConnectionChanged(boolean connected);
-    }
-
-    public interface CommandCallback {
-        void onResult(boolean accepted);
+        void onStateReceived(WatchProtocol.WatchState state);
+        void onMatchEnded(WatchProtocol.MatchEndedEvent event);
+        void onCommandAck(boolean accepted, boolean gameOrMatchBall);
     }
 
     private final Handler mainHandler;
-    private final ConnectionListener connectionListener;
-    private final Object socketLock = new Object();
+    private final ClientListener listener;
+    private final Object writeLock = new Object();
     private final ExecutorService commandExecutor = Executors.newSingleThreadExecutor();
+    private final AtomicInteger backoffAttempt = new AtomicInteger(0);
 
     private volatile boolean running;
     private volatile boolean connected;
-    private BluetoothSocket activeSocket;
-    private InputStream activeInput;
-    private OutputStream activeOutput;
+    private volatile BluetoothSocket activeSocket;
+    private volatile OutputStream activeOutput;
     private Thread connectionThread;
 
-    public BluetoothWatchClient(Handler mainHandler, ConnectionListener connectionListener) {
+    public BluetoothWatchClient(Handler mainHandler, ClientListener listener) {
         this.mainHandler = mainHandler;
-        this.connectionListener = connectionListener;
+        this.listener = listener;
+    }
+
+    public static long getBackoffDelayMs(int attemptIndex) {
+        if (attemptIndex <= 0) return BACKOFF_DELAYS_MS[0];
+        if (attemptIndex >= BACKOFF_DELAYS_MS.length) {
+            return BACKOFF_DELAYS_MS[BACKOFF_DELAYS_MS.length - 1];
+        }
+        return BACKOFF_DELAYS_MS[attemptIndex];
     }
 
     public synchronized void start() {
         if (running) return;
         running = true;
-        connectionThread = new Thread(this::connectionLoop, "watch-bt-reconnect-loop");
+        backoffAttempt.set(0);
+        connectionThread = new Thread(this::connectionLoop, "watch-bt-session-loop");
         connectionThread.setDaemon(true);
         connectionThread.start();
     }
@@ -72,9 +83,10 @@ public final class BluetoothWatchClient {
     }
 
     /**
-     * Triggers an immediate reconnect attempt if currently disconnected.
+     * Resets exponential backoff and triggers an immediate reconnect attempt if disconnected.
      */
     public void requestReconnectNow() {
+        backoffAttempt.set(0);
         Thread t = connectionThread;
         if (t != null && !connected) {
             t.interrupt();
@@ -82,56 +94,63 @@ public final class BluetoothWatchClient {
     }
 
     /**
-     * Sends a single watch command over the active RFCOMM socket.
+     * Sends a single watch command over the persistent RFCOMM socket.
      * Obeys AGENTS.md Rule 5.1.1: never queues or retries a failed command.
      */
-    public void sendCommand(final String command, final CommandCallback callback) {
+    public void sendCommand(final String command) {
         if (!WatchProtocol.isAllowedCommand(command)) {
-            dispatchResult(callback, false);
+            dispatchAck(false, false);
             return;
         }
         commandExecutor.execute(() -> {
             final byte[] payload = WatchProtocol.encodeCommandLine(command).getBytes(StandardCharsets.UTF_8);
-            boolean accepted = false;
-            synchronized (socketLock) {
-                if (activeSocket != null && activeOutput != null && activeInput != null) {
+            boolean sent = false;
+            synchronized (writeLock) {
+                OutputStream out = activeOutput;
+                if (connected && out != null) {
                     try {
-                        activeOutput.write(payload);
-                        activeOutput.flush();
-                        String responseLine = readBoundedLine(activeInput);
-                        if (responseLine == null) {
-                            throw new IOException("Bluetooth stream closed by peer");
-                        }
-                        accepted = WatchProtocol.parseAcceptedResponse(responseLine);
+                        out.write(payload);
+                        out.flush();
+                        sent = true;
                     } catch (IOException e) {
-                        Log.w(TAG, "Command send failed; closing socket without retry", e);
+                        Log.w(TAG, "Command write failed; closing socket without retry", e);
                         closeActiveSocket();
                         requestReconnectNow();
                     }
                 }
             }
-            dispatchResult(callback, accepted);
+            if (!sent) {
+                dispatchAck(false, false);
+                requestReconnectNow();
+            }
         });
     }
 
     private void connectionLoop() {
         while (running) {
-            if (!connected) {
-                tryConnectToPairedPhone();
+            BluetoothSocket socket = tryConnectToPairedPhone();
+            if (socket != null) {
+                backoffAttempt.set(0);
+                runPersistentReaderLoop(socket);
+                closeActiveSocket();
             }
+            if (!running) break;
+
+            int attempt = backoffAttempt.getAndIncrement();
+            long sleepMs = getBackoffDelayMs(attempt);
             try {
-                Thread.sleep(RECONNECT_DELAY_MS);
+                Thread.sleep(sleepMs);
             } catch (InterruptedException ignored) {
                 // Woken up for immediate reconnect or stop()
             }
         }
     }
 
-    private void tryConnectToPairedPhone() {
+    private BluetoothSocket tryConnectToPairedPhone() {
         BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
         if (adapter == null || !adapter.isEnabled()) {
             updateConnectionState(false);
-            return;
+            return null;
         }
 
         Set<BluetoothDevice> bondedDevices;
@@ -140,12 +159,12 @@ public final class BluetoothWatchClient {
         } catch (SecurityException e) {
             Log.w(TAG, "Bluetooth permission denied", e);
             updateConnectionState(false);
-            return;
+            return null;
         }
 
         if (bondedDevices == null || bondedDevices.isEmpty()) {
             updateConnectionState(false);
-            return;
+            return null;
         }
 
         try {
@@ -155,16 +174,15 @@ public final class BluetoothWatchClient {
         } catch (SecurityException ignored) { }
 
         for (BluetoothDevice device : bondedDevices) {
-            if (!running) return;
+            if (!running) return null;
             BluetoothSocket socket = openRfcommSocket(device);
             if (socket != null) {
-                synchronized (socketLock) {
+                synchronized (writeLock) {
                     try {
                         activeSocket = socket;
-                        activeInput = new BufferedInputStream(socket.getInputStream());
                         activeOutput = socket.getOutputStream();
                         updateConnectionState(true);
-                        return;
+                        return socket;
                     } catch (IOException e) {
                         closeQuietly(socket);
                     }
@@ -172,6 +190,43 @@ public final class BluetoothWatchClient {
             }
         }
         updateConnectionState(false);
+        return null;
+    }
+
+    private void runPersistentReaderLoop(BluetoothSocket socket) {
+        try {
+            InputStream input = new BufferedInputStream(socket.getInputStream());
+            while (running && connected) {
+                String line = readBoundedLine(input);
+                if (line == null) {
+                    break;
+                }
+                handleIncomingLine(line);
+            }
+        } catch (IOException e) {
+            if (running) {
+                Log.w(TAG, "Persistent Bluetooth reader ended", e);
+            }
+        }
+    }
+
+    private void handleIncomingLine(String line) {
+        String type = WatchProtocol.parseMessageType(line);
+        if (WatchProtocol.MSG_STATE.equals(type)) {
+            WatchProtocol.WatchState state = WatchProtocol.parseWatchState(line);
+            if (state != null && mainHandler != null && listener != null) {
+                mainHandler.post(() -> listener.onStateReceived(state));
+            }
+        } else if (WatchProtocol.MSG_MATCH_ENDED.equals(type)) {
+            WatchProtocol.MatchEndedEvent event = WatchProtocol.parseMatchEnded(line);
+            if (event != null && mainHandler != null && listener != null) {
+                mainHandler.post(() -> listener.onMatchEnded(event));
+            }
+        } else if (WatchProtocol.MSG_ACK.equals(type)) {
+            boolean accepted = WatchProtocol.parseAcceptedResponse(line);
+            boolean ball = WatchProtocol.parseAckBall(line);
+            dispatchAck(accepted, ball);
+        }
     }
 
     private BluetoothSocket openRfcommSocket(BluetoothDevice device) {
@@ -198,13 +253,13 @@ public final class BluetoothWatchClient {
     }
 
     private static String readBoundedLine(InputStream input) throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream(64);
+        ByteArrayOutputStream out = new ByteArrayOutputStream(128);
         int b;
         while ((b = input.read()) != -1) {
             if (b == '\n') break;
             if (b != '\r') out.write(b);
-            if (out.size() > 256) {
-                throw new IOException("Response line exceeded 256 bytes");
+            if (out.size() > 1024) {
+                throw new IOException("Incoming line exceeded 1024 bytes");
             }
         }
         if (b == -1 && out.size() == 0) return null;
@@ -212,10 +267,9 @@ public final class BluetoothWatchClient {
     }
 
     private void closeActiveSocket() {
-        synchronized (socketLock) {
+        synchronized (writeLock) {
             closeQuietly(activeSocket);
             activeSocket = null;
-            activeInput = null;
             activeOutput = null;
         }
         updateConnectionState(false);
@@ -232,14 +286,14 @@ public final class BluetoothWatchClient {
     private void updateConnectionState(final boolean nextConnected) {
         if (this.connected == nextConnected) return;
         this.connected = nextConnected;
-        if (mainHandler != null && connectionListener != null) {
-            mainHandler.post(() -> connectionListener.onConnectionChanged(nextConnected));
+        if (mainHandler != null && listener != null) {
+            mainHandler.post(() -> listener.onConnectionChanged(nextConnected));
         }
     }
 
-    private void dispatchResult(final CommandCallback callback, final boolean accepted) {
-        if (callback == null || mainHandler == null) return;
-        mainHandler.post(() -> callback.onResult(accepted));
+    private void dispatchAck(final boolean accepted, final boolean gameOrMatchBall) {
+        if (mainHandler != null && listener != null) {
+            mainHandler.post(() -> listener.onCommandAck(accepted, gameOrMatchBall));
+        }
     }
 }
-
