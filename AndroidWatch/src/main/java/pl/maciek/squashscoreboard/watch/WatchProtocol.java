@@ -372,4 +372,18 @@ public final class WatchProtocol {
         float dy = currentY - startY;
         return (dx * dx + dy * dy) > (slopPx * slopPx);
     }
+
+    /**
+     * Checks if the points match the 6-7 or 7-6 special score.
+     */
+    public static boolean isReaction67Score(int p1, int p2) {
+        return (p1 == 6 && p2 == 7) || (p1 == 7 && p2 == 6);
+    }
+
+    /**
+     * Checks if the points match the 6-9 or 9-6 special score.
+     */
+    public static boolean isReaction69Score(int p1, int p2) {
+        return (p1 == 6 && p2 == 9) || (p1 == 9 && p2 == 6);
+    }
 }

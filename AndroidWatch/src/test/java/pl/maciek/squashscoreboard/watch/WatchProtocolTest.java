@@ -132,4 +132,19 @@ public final class WatchProtocolTest {
         assertFalse(WatchProtocol.isTouchMovementExceeded(10f, 12f, 20f, 22f, 8f));
         assertTrue(WatchProtocol.isTouchMovementExceeded(10f, 20f, 20f, 20f, 8f));
     }
+
+    @Test
+    public void detectsReactionScoresAccurately() {
+        assertTrue(WatchProtocol.isReaction67Score(6, 7));
+        assertTrue(WatchProtocol.isReaction67Score(7, 6));
+        assertFalse(WatchProtocol.isReaction67Score(6, 6));
+        assertFalse(WatchProtocol.isReaction67Score(7, 7));
+        assertFalse(WatchProtocol.isReaction67Score(6, 8));
+
+        assertTrue(WatchProtocol.isReaction69Score(6, 9));
+        assertTrue(WatchProtocol.isReaction69Score(9, 6));
+        assertFalse(WatchProtocol.isReaction69Score(6, 8));
+        assertFalse(WatchProtocol.isReaction69Score(9, 9));
+        assertFalse(WatchProtocol.isReaction69Score(7, 9));
+    }
 }

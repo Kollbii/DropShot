@@ -19,7 +19,9 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -60,7 +62,8 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
     private static final long SHOW_HOLD_TEXT_DELAY_MS = 400L;
     private static final long SIDE_SWITCH_HOLD_DURATION_MS = 1000L;
     private static final long SIDE_SWITCH_SHOW_TEXT_DELAY_MS = 200L;
-    private static final long SIDE_SWITCH_GRACE_DURATION_MS = 1500L;
+    private static final long SIDE_SWITCH_LOCKOUT_DURATION_MS = 2500L;
+    private static final long REACTION_DISPLAY_DURATION_MS = 2600L;
 
     private static final int EDGE_SWIPE_MAX_START_DP = 36;
     private static final int SWIPE_EXIT_MIN_DX_DP = 70;
@@ -93,9 +96,16 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
     private TextView p2ServiceSideView;
 
     private boolean sideSwitchTriggered;
-    private long sideSwitchGraceUntilUptimeMs;
+    private long tileLockoutUntilUptimeMs;
     private Runnable sideSwitchVisualRunnable;
     private Runnable sideSwitchHoldRunnable;
+    private final Runnable restoreLockoutRunnable = this::restoreTileLockoutVisuals;
+
+    // Score reaction badges (Cat 6-7, Shrek 6-9)
+    private ImageView reactionBadgeView;
+    private int previousP1Points = -1;
+    private int previousP2Points = -1;
+    private final Runnable hideReactionRunnable = () -> hideReactionBadge(false);
 
     // Edge-swipe exit and touch slop
     private int touchSlopPx;
@@ -170,6 +180,8 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         mainHandler.removeCallbacks(showHoldTextRunnable);
         mainHandler.removeCallbacks(resetHoldRunnable);
         mainHandler.removeCallbacks(dimBrightnessRunnable);
+        mainHandler.removeCallbacks(restoreLockoutRunnable);
+        mainHandler.removeCallbacks(hideReactionRunnable);
         if (sideSwitchVisualRunnable != null) {
             mainHandler.removeCallbacks(sideSwitchVisualRunnable);
             sideSwitchVisualRunnable = null;
@@ -409,6 +421,19 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         hitBoxParams.topMargin = 0;
         root.addView(statusHitBox, hitBoxParams);
 
+        reactionBadgeView = new ImageView(this);
+        reactionBadgeView.setVisibility(View.GONE);
+        reactionBadgeView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        reactionBadgeView.setAdjustViewBounds(true);
+        reactionBadgeView.setContentDescription("Score reaction graphic.");
+        reactionBadgeView.setClickable(true);
+        reactionBadgeView.setOnClickListener(v -> hideReactionBadge(true));
+
+        FrameLayout.LayoutParams reactionParams = new FrameLayout.LayoutParams(
+            dp(80), dp(80), Gravity.CENTER
+        );
+        root.addView(reactionBadgeView, reactionParams);
+
         matchEndOverlay = createMatchEndOverlay();
         root.addView(matchEndOverlay, new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
@@ -461,19 +486,16 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         tile.setOnTouchListener((v, event) -> {
             int action = event.getActionMasked();
             long now = SystemClock.uptimeMillis();
-            if (now < sideSwitchGraceUntilUptimeMs) {
-                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                    v.setAlpha(1.0f);
-                }
+            if (now < tileLockoutUntilUptimeMs) {
                 return true;
             }
             if (action == MotionEvent.ACTION_DOWN) {
                 downCoords[0] = event.getX();
                 downCoords[1] = event.getY();
                 dragDetected[0] = false;
+                sideSwitchTriggered = false;
                 v.setAlpha(0.82f);
                 if (playerNumber == currentState.activeServer) {
-                    sideSwitchTriggered = false;
                     if (sideSwitchVisualRunnable != null) {
                         mainHandler.removeCallbacks(sideSwitchVisualRunnable);
                     }
@@ -489,7 +511,6 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
 
                     sideSwitchHoldRunnable = () -> {
                         sideSwitchTriggered = true;
-                        sideSwitchGraceUntilUptimeMs = SystemClock.uptimeMillis() + SIDE_SWITCH_GRACE_DURATION_MS;
                         vibratePattern(VIBRATE_DOUBLE_HAPTIC);
                         if (watchClient != null) {
                             watchClient.sendCommand(WatchProtocol.CMD_TOGGLE_SIDE);
@@ -514,15 +535,15 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
                             currentState.matchFinished,
                             currentState.paused
                         );
-                        serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-                        serviceSideView.setTextColor(Color.WHITE);
-                        serviceSideView.setText("[" + newSide + "]");
+                        serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11);
+                        serviceSideView.setTextColor(ACTIVE_SERVER_BORDER_COLOR);
+                        serviceSideView.setText("[RELEASE]");
                     };
                     mainHandler.postDelayed(sideSwitchHoldRunnable, SIDE_SWITCH_HOLD_DURATION_MS);
                 }
                 return true;
             } else if (action == MotionEvent.ACTION_MOVE) {
-                if (!dragDetected[0]) {
+                if (!dragDetected[0] && !sideSwitchTriggered) {
                     if (WatchProtocol.isTouchMovementExceeded(downCoords[0], event.getX(), downCoords[1], event.getY(), touchSlopPx)) {
                         dragDetected[0] = true;
                         v.setAlpha(1.0f);
@@ -543,24 +564,28 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
                 }
                 return true;
             } else if (action == MotionEvent.ACTION_UP) {
+                if (sideSwitchVisualRunnable != null) {
+                    mainHandler.removeCallbacks(sideSwitchVisualRunnable);
+                    sideSwitchVisualRunnable = null;
+                }
+                if (sideSwitchHoldRunnable != null) {
+                    mainHandler.removeCallbacks(sideSwitchHoldRunnable);
+                    sideSwitchHoldRunnable = null;
+                }
+                if (sideSwitchTriggered) {
+                    sideSwitchTriggered = false;
+                    tileLockoutUntilUptimeMs = SystemClock.uptimeMillis() + SIDE_SWITCH_LOCKOUT_DURATION_MS;
+                    if (p1Tile != null) p1Tile.setAlpha(0.6f);
+                    if (p2Tile != null) p2Tile.setAlpha(0.6f);
+                    serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11);
+                    serviceSideView.setTextColor(ACTIVE_SERVER_BORDER_COLOR);
+                    serviceSideView.setText("[LOCKED]");
+                    mainHandler.removeCallbacks(restoreLockoutRunnable);
+                    mainHandler.postDelayed(restoreLockoutRunnable, SIDE_SWITCH_LOCKOUT_DURATION_MS);
+                    return true;
+                }
                 v.setAlpha(1.0f);
                 if (playerNumber == currentState.activeServer) {
-                    if (sideSwitchVisualRunnable != null) {
-                        mainHandler.removeCallbacks(sideSwitchVisualRunnable);
-                        sideSwitchVisualRunnable = null;
-                    }
-                    if (sideSwitchHoldRunnable != null) {
-                        mainHandler.removeCallbacks(sideSwitchHoldRunnable);
-                        sideSwitchHoldRunnable = null;
-                    }
-                    if (sideSwitchTriggered) {
-                        sideSwitchTriggered = false;
-                        sideSwitchGraceUntilUptimeMs = SystemClock.uptimeMillis() + SIDE_SWITCH_GRACE_DURATION_MS;
-                        serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-                        serviceSideView.setTextColor(Color.WHITE);
-                        serviceSideView.setText("[" + currentState.serviceSide + "]");
-                        return true;
-                    }
                     serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
                     serviceSideView.setTextColor(Color.WHITE);
                     serviceSideView.setText("[" + currentState.serviceSide + "]");
@@ -575,19 +600,25 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
             } else if (action == MotionEvent.ACTION_CANCEL) {
                 v.setAlpha(1.0f);
                 dragDetected[0] = false;
-                if (playerNumber == currentState.activeServer) {
-                    if (sideSwitchVisualRunnable != null) {
-                        mainHandler.removeCallbacks(sideSwitchVisualRunnable);
-                        sideSwitchVisualRunnable = null;
-                    }
-                    if (sideSwitchHoldRunnable != null) {
-                        mainHandler.removeCallbacks(sideSwitchHoldRunnable);
-                        sideSwitchHoldRunnable = null;
-                    }
-                    if (sideSwitchTriggered) {
-                        sideSwitchTriggered = false;
-                        sideSwitchGraceUntilUptimeMs = SystemClock.uptimeMillis() + SIDE_SWITCH_GRACE_DURATION_MS;
-                    }
+                if (sideSwitchVisualRunnable != null) {
+                    mainHandler.removeCallbacks(sideSwitchVisualRunnable);
+                    sideSwitchVisualRunnable = null;
+                }
+                if (sideSwitchHoldRunnable != null) {
+                    mainHandler.removeCallbacks(sideSwitchHoldRunnable);
+                    sideSwitchHoldRunnable = null;
+                }
+                if (sideSwitchTriggered) {
+                    sideSwitchTriggered = false;
+                    tileLockoutUntilUptimeMs = SystemClock.uptimeMillis() + SIDE_SWITCH_LOCKOUT_DURATION_MS;
+                    if (p1Tile != null) p1Tile.setAlpha(0.6f);
+                    if (p2Tile != null) p2Tile.setAlpha(0.6f);
+                    serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11);
+                    serviceSideView.setTextColor(ACTIVE_SERVER_BORDER_COLOR);
+                    serviceSideView.setText("[LOCKED]");
+                    mainHandler.removeCallbacks(restoreLockoutRunnable);
+                    mainHandler.postDelayed(restoreLockoutRunnable, SIDE_SWITCH_LOCKOUT_DURATION_MS);
+                } else if (playerNumber == currentState.activeServer) {
                     serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
                     serviceSideView.setTextColor(Color.WHITE);
                     serviceSideView.setText("[" + currentState.serviceSide + "]");
@@ -823,15 +854,22 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         p1PointsView.setText(String.valueOf(state.playerOnePoints));
         p2PointsView.setText(String.valueOf(state.playerTwoPoints));
 
+        boolean isLocked = SystemClock.uptimeMillis() < tileLockoutUntilUptimeMs;
+        if (p1Tile != null) p1Tile.setAlpha(isLocked ? 0.6f : 1.0f);
+        if (p2Tile != null) p2Tile.setAlpha(isLocked ? 0.6f : 1.0f);
+
         boolean p1Serves = state.activeServer == 1;
-        String sideTag = "[" + state.serviceSide + "]";
-        p1ServiceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        p1ServiceSideView.setTextColor(Color.WHITE);
+        String sideTag = isLocked ? "[LOCKED]" : ("[" + state.serviceSide + "]");
+        int sideTextSize = isLocked ? 11 : 14;
+        int sideColor = isLocked ? ACTIVE_SERVER_BORDER_COLOR : Color.WHITE;
+
+        p1ServiceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, sideTextSize);
+        p1ServiceSideView.setTextColor(sideColor);
         p1ServiceSideView.setText(p1Serves ? sideTag : "");
         p1ServiceSideView.setVisibility(p1Serves ? View.VISIBLE : View.INVISIBLE);
 
-        p2ServiceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        p2ServiceSideView.setTextColor(Color.WHITE);
+        p2ServiceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, sideTextSize);
+        p2ServiceSideView.setTextColor(sideColor);
         p2ServiceSideView.setText(!p1Serves ? sideTag : "");
         p2ServiceSideView.setVisibility(!p1Serves ? View.VISIBLE : View.INVISIBLE);
 
@@ -839,6 +877,85 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         applyTileBackground(p2TileBg, state.playerTwoColor, state.playerTwoRainbow, !p1Serves);
 
         updateActionButtonStyle(state.actionLabel);
+
+        // Check for special score reactions (Cat 6-7, Shrek 6-9)
+        boolean scoreChanged = (state.playerOnePoints != previousP1Points || state.playerTwoPoints != previousP2Points);
+        if (scoreChanged && !state.matchFinished) {
+            if (WatchProtocol.isReaction67Score(state.playerOnePoints, state.playerTwoPoints)) {
+                if (!WatchProtocol.isReaction67Score(previousP1Points, previousP2Points)) {
+                    showReactionBadge(R.drawable.reaction_cat_67);
+                }
+            } else if (WatchProtocol.isReaction69Score(state.playerOnePoints, state.playerTwoPoints)) {
+                if (!WatchProtocol.isReaction69Score(previousP1Points, previousP2Points)) {
+                    showReactionBadge(R.drawable.reaction_shrek_69);
+                }
+            } else {
+                hideReactionBadge(false);
+            }
+        } else if (state.matchFinished) {
+            hideReactionBadge(true);
+        }
+        previousP1Points = state.playerOnePoints;
+        previousP2Points = state.playerTwoPoints;
+    }
+
+    private void restoreTileLockoutVisuals() {
+        if (p1Tile != null) p1Tile.setAlpha(1.0f);
+        if (p2Tile != null) p2Tile.setAlpha(1.0f);
+        boolean p1Serves = currentState.activeServer == 1;
+        String sideTag = "[" + currentState.serviceSide + "]";
+        if (p1ServiceSideView != null) {
+            p1ServiceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+            p1ServiceSideView.setTextColor(Color.WHITE);
+            p1ServiceSideView.setText(p1Serves ? sideTag : "");
+            p1ServiceSideView.setVisibility(p1Serves ? View.VISIBLE : View.INVISIBLE);
+        }
+        if (p2ServiceSideView != null) {
+            p2ServiceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+            p2ServiceSideView.setTextColor(Color.WHITE);
+            p2ServiceSideView.setText(!p1Serves ? sideTag : "");
+            p2ServiceSideView.setVisibility(!p1Serves ? View.VISIBLE : View.INVISIBLE);
+        }
+    }
+
+    private void showReactionBadge(int drawableResId) {
+        if (reactionBadgeView == null) return;
+        mainHandler.removeCallbacks(hideReactionRunnable);
+        reactionBadgeView.animate().cancel();
+
+        reactionBadgeView.setImageResource(drawableResId);
+        reactionBadgeView.setVisibility(View.VISIBLE);
+        reactionBadgeView.setAlpha(0.0f);
+        reactionBadgeView.setScaleX(0.2f);
+        reactionBadgeView.setScaleY(0.2f);
+
+        reactionBadgeView.animate()
+            .alpha(1.0f)
+            .scaleX(1.0f)
+            .scaleY(1.0f)
+            .setDuration(220L)
+            .setInterpolator(new OvershootInterpolator(2.2f))
+            .withEndAction(() -> mainHandler.postDelayed(hideReactionRunnable, REACTION_DISPLAY_DURATION_MS))
+            .start();
+    }
+
+    private void hideReactionBadge(boolean immediate) {
+        if (reactionBadgeView == null || reactionBadgeView.getVisibility() != View.VISIBLE) {
+            return;
+        }
+        mainHandler.removeCallbacks(hideReactionRunnable);
+        if (immediate) {
+            reactionBadgeView.animate().cancel();
+            reactionBadgeView.setVisibility(View.GONE);
+            return;
+        }
+        reactionBadgeView.animate()
+            .alpha(0.0f)
+            .scaleX(0.85f)
+            .scaleY(0.85f)
+            .setDuration(600L)
+            .withEndAction(() -> reactionBadgeView.setVisibility(View.GONE))
+            .start();
     }
 
     private void applyTileBackground(

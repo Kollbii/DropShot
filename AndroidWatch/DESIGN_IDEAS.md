@@ -149,24 +149,27 @@ The table compares the 5 interaction ideas:
 
 ---
 
-### 3.4 Idea D: 1-Second Hold on Active Server Tile (Implemented)
+### 3.4 Idea D: 1-Second Hold on Active Server Tile + Post-Release Lockout (Implemented)
 
 * **Description**:
   Pressing and holding the active server tile for 1.0 second toggles the service side between `[R]` and `[L]`.
   A `[CHANGING...]` gold text indicator displays after 200 ms.
-  When 1.0 second elapses, a double haptic pulse confirms the toggle.
+  When 1.0 second elapses, a double haptic pulse confirms the toggle and the label updates to `[RELEASE]`.
   Releasing before 1.0 second registers a regular point tap.
-* **Grace period protection**:
-  A 1.5-second touch grace period activates upon side toggle and on finger lift.
-  The grace period absorbs finger bounce and prevents accidental point registration when releasing or tapping immediately after a switch.
+* **Post-release touch lockout protection**:
+  When you lift your finger after toggling the side, a 2.5-second lockout timer starts from the exact release moment.
+  During this 2.5-second lockout:
+  - Both player score tiles dim to 60% opacity (`alpha = 0.6f`).
+  - The server tile shows a gold `[LOCKED]` badge.
+  - All touch events on the player tiles are rejected.
+  - After 2.5 seconds, the tiles restore full opacity and normal service box text (`[R]` or `[L]`).
 * **Advantages**:
   * Completely eyes-free operation.
   * No extra buttons or clutter.
-  * Normal single taps stay instant (no tap-detection delay).
-  * Only applies to the active server tile.
-  * Grace period eliminates phantom points upon finger release.
+  * Normal single taps stay instant.
+  * Anchoring lockout to finger release eliminates phantom points and capacitive release bounce.
 * **Disadvantages**:
-  * The player must wait 1.0 second to change the side.
+  * The player must wait 2.5 seconds before adding a point to the score.
 
 ---
 
@@ -259,5 +262,21 @@ The table summarizes the 4 design options:
 
 3. **Application exit**:
    Idea A (Edge-Swipe in `dispatchTouchEvent` + Touch Slop) is active. It ensures reliable left-edge exit gestures while filtering out accidental drags on scoring tiles and buttons.
+
+---
+
+## 6. Score Reaction Animations (Easter Eggs)
+
+DropShot includes celebratory animations on specific match scores:
+
+* **Score 6-7 / 7-6**: Displays the Cat reaction badge (`reaction_cat_67.png`).
+* **Score 6-9 / 9-6**: Displays the Shrek reaction badge (`reaction_shrek_69.png`).
+
+### 6.1 Animation Mechanics
+* **Jump In**: Scales from 0.2 to 1.0 with an overshoot bounce over 220 ms.
+* **Display**: Stays centered between player tiles for 2.6 seconds.
+* **Fade Out**: Fades out over 600 ms and shrinks to 0.85 scale. Total duration is ~3.4 seconds.
+* **Dismissal**: Tapping the reaction badge or scoring another point dismisses the badge immediately.
+
 
 
