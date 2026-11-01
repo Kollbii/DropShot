@@ -8,6 +8,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.os.Vibrator;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
@@ -58,6 +59,7 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
     private static final long SHOW_HOLD_TEXT_DELAY_MS = 400L;
     private static final long SIDE_SWITCH_HOLD_DURATION_MS = 1000L;
     private static final long SIDE_SWITCH_SHOW_TEXT_DELAY_MS = 200L;
+    private static final long SIDE_SWITCH_GRACE_DURATION_MS = 1500L;
 
     private static final long VIBRATE_POINT_MS = 35L;
     private static final long[] VIBRATE_DOUBLE_HAPTIC = new long[]{0L, 30L, 45L, 30L};
@@ -87,6 +89,7 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
     private TextView p2ServiceSideView;
 
     private boolean sideSwitchTriggered;
+    private long sideSwitchGraceUntilUptimeMs;
     private Runnable sideSwitchVisualRunnable;
     private Runnable sideSwitchHoldRunnable;
 
@@ -391,6 +394,13 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         final String command = playerNumber == 1 ? WatchProtocol.CMD_POINT_1 : WatchProtocol.CMD_POINT_2;
         tile.setOnTouchListener((v, event) -> {
             int action = event.getActionMasked();
+            long now = SystemClock.uptimeMillis();
+            if (now < sideSwitchGraceUntilUptimeMs) {
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    v.setAlpha(1.0f);
+                }
+                return true;
+            }
             if (action == MotionEvent.ACTION_DOWN) {
                 v.setAlpha(0.82f);
                 if (playerNumber == currentState.activeServer) {
@@ -410,6 +420,7 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
 
                     sideSwitchHoldRunnable = () -> {
                         sideSwitchTriggered = true;
+                        sideSwitchGraceUntilUptimeMs = SystemClock.uptimeMillis() + SIDE_SWITCH_GRACE_DURATION_MS;
                         vibratePattern(VIBRATE_DOUBLE_HAPTIC);
                         if (watchClient != null) {
                             watchClient.sendCommand(WatchProtocol.CMD_TOGGLE_SIDE);
@@ -454,6 +465,7 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
                     }
                     if (sideSwitchTriggered) {
                         sideSwitchTriggered = false;
+                        sideSwitchGraceUntilUptimeMs = SystemClock.uptimeMillis() + SIDE_SWITCH_GRACE_DURATION_MS;
                         serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
                         serviceSideView.setTextColor(Color.WHITE);
                         serviceSideView.setText("[" + currentState.serviceSide + "]");
@@ -479,7 +491,10 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
                         mainHandler.removeCallbacks(sideSwitchHoldRunnable);
                         sideSwitchHoldRunnable = null;
                     }
-                    sideSwitchTriggered = false;
+                    if (sideSwitchTriggered) {
+                        sideSwitchTriggered = false;
+                        sideSwitchGraceUntilUptimeMs = SystemClock.uptimeMillis() + SIDE_SWITCH_GRACE_DURATION_MS;
+                    }
                     serviceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
                     serviceSideView.setTextColor(Color.WHITE);
                     serviceSideView.setText("[" + currentState.serviceSide + "]");
@@ -705,9 +720,10 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
     ) {
         if (drawable == null) return;
         drawable.setCornerRadius(dp(8));
-        if (isRainbow) {
+        int[] gradientStops = WatchProtocol.getGradientStops(solidColor, isRainbow);
+        if (gradientStops != null) {
             drawable.setOrientation(GradientDrawable.Orientation.TL_BR);
-            drawable.setColors(WatchProtocol.RAINBOW_STOPS);
+            drawable.setColors(gradientStops);
         } else {
             int opaqueColor = 0xFF000000 | solidColor;
             drawable.setColors(new int[]{opaqueColor, opaqueColor});

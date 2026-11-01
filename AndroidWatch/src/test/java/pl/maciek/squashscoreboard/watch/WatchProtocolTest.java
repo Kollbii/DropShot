@@ -1,5 +1,6 @@
 package pl.maciek.squashscoreboard.watch;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -100,5 +101,21 @@ public final class WatchProtocolTest {
         assertEquals(10000L, BluetoothWatchClient.getBackoffDelayMs(2));
         assertEquals(10000L, BluetoothWatchClient.getBackoffDelayMs(3));
         assertEquals(10000L, BluetoothWatchClient.getBackoffDelayMs(100));
+    }
+
+    @Test
+    public void providesGradientStopsForRainbowAndPurpleRewards() {
+        assertArrayEquals(WatchProtocol.RAINBOW_STOPS, WatchProtocol.getGradientStops(0, true));
+        assertArrayEquals(WatchProtocol.RAINBOW_STOPS, WatchProtocol.getGradientStops(WatchProtocol.KEY_RAINBOW, false));
+        assertArrayEquals(WatchProtocol.SUNSET_STOPS, WatchProtocol.getGradientStops(WatchProtocol.KEY_SUNSET, false));
+        assertArrayEquals(WatchProtocol.OCEAN_STOPS, WatchProtocol.getGradientStops(WatchProtocol.KEY_OCEAN, false));
+        assertArrayEquals(WatchProtocol.AURORA_STOPS, WatchProtocol.getGradientStops(WatchProtocol.KEY_AURORA, false));
+        assertArrayEquals(WatchProtocol.ORCHID_STOPS, WatchProtocol.getGradientStops(WatchProtocol.KEY_ORCHID, false));
+        assertArrayEquals(WatchProtocol.EMBER_STOPS, WatchProtocol.getGradientStops(WatchProtocol.KEY_EMBER, false));
+
+        assertArrayEquals(WatchProtocol.ORCHID_STOPS, WatchProtocol.getGradientStops(WatchProtocol.KEY_ORCHID_DARKENED, false));
+
+        assertNull(WatchProtocol.getGradientStops(0xFF3184FF, false));
+        assertNull(WatchProtocol.getGradientStops(0xFFF45C5C, false));
     }
 }

@@ -28,9 +28,54 @@ public final class WatchProtocol {
 
     public static final int DEFAULT_P1_COLOR = 0xFF1479D1;
     public static final int DEFAULT_P2_COLOR = 0xFFD8424F;
+
+    public static final int KEY_SUNSET = 0xFFFF765E;
+    public static final int KEY_OCEAN = 0xFF087FA8;
+    public static final int KEY_AURORA = 0xFF704FC1;
+    public static final int KEY_ORCHID = 0xFF9C55C2;
+    public static final int KEY_EMBER = 0xFFC64648;
+    public static final int KEY_RAINBOW = 0xFFFF5059;
+
+    public static final int KEY_SUNSET_DARKENED = 0xFF9C5245;
+    public static final int KEY_OCEAN_DARKENED = 0xFF0D546F;
+    public static final int KEY_AURORA_DARKENED = 0xFF49397E;
+    public static final int KEY_ORCHID_DARKENED = 0xFF623D7F;
+    public static final int KEY_EMBER_DARKENED = 0xFF7B3538;
+
+    public static final int[] SUNSET_STOPS = new int[]{ 0xFFFF765E, 0xFFF9B45B, 0xFFDE5B8D };
+    public static final int[] OCEAN_STOPS = new int[]{ 0xFF087FA8, 0xFF27C4C1, 0xFF91E2CD };
+    public static final int[] AURORA_STOPS = new int[]{ 0xFF704FC1, 0xFF20AFAC, 0xFF76D88B };
+    public static final int[] ORCHID_STOPS = new int[]{ 0xFF9C55C2, 0xFFDA72B5, 0xFFF4A887 };
+    public static final int[] EMBER_STOPS = new int[]{ 0xFFC64648, 0xFFF0924F, 0xFFFFD476 };
     public static final int[] RAINBOW_STOPS = new int[]{
         0xFFFF5059, 0xFFFFA838, 0xFFF4DE4A, 0xFF57CE87, 0xFF48A9EF, 0xFF9B6AE8, 0xFFFF5059
     };
+
+    /**
+     * Returns gradient color stops for rainbow and purple tier cosmetic rewards.
+     * Returns null for solid colors.
+     */
+    public static int[] getGradientStops(int colorKey, boolean isRainbow) {
+        if (isRainbow || colorKey == KEY_RAINBOW) {
+            return RAINBOW_STOPS.clone();
+        }
+        if (colorKey == KEY_SUNSET || colorKey == KEY_SUNSET_DARKENED) {
+            return SUNSET_STOPS.clone();
+        }
+        if (colorKey == KEY_OCEAN || colorKey == KEY_OCEAN_DARKENED) {
+            return OCEAN_STOPS.clone();
+        }
+        if (colorKey == KEY_AURORA || colorKey == KEY_AURORA_DARKENED) {
+            return AURORA_STOPS.clone();
+        }
+        if (colorKey == KEY_ORCHID || colorKey == KEY_ORCHID_DARKENED) {
+            return ORCHID_STOPS.clone();
+        }
+        if (colorKey == KEY_EMBER || colorKey == KEY_EMBER_DARKENED) {
+            return EMBER_STOPS.clone();
+        }
+        return null;
+    }
 
     public static final class WatchState {
         public final String playerOneInitials;

@@ -156,11 +156,15 @@ The table compares the 5 interaction ideas:
   A `[CHANGING...]` gold text indicator displays after 200 ms.
   When 1.0 second elapses, a double haptic pulse confirms the toggle.
   Releasing before 1.0 second registers a regular point tap.
+* **Grace period protection**:
+  A 1.5-second touch grace period activates upon side toggle and on finger lift.
+  The grace period absorbs finger bounce and prevents accidental point registration when releasing or tapping immediately after a switch.
 * **Advantages**:
   * Completely eyes-free operation.
   * No extra buttons or clutter.
   * Normal single taps stay instant (no tap-detection delay).
   * Only applies to the active server tile.
+  * Grace period eliminates phantom points upon finger release.
 * **Disadvantages**:
   * The player must wait 1.0 second to change the side.
 

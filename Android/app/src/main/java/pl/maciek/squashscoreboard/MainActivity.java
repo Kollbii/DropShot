@@ -936,10 +936,16 @@ public class MainActivity extends Activity {
     }
 
     private String buildWatchStateLine() {
-        boolean p1Rainbow = playerOneColor == BluetoothWatchServer.RAINBOW_COLOR_KEY;
-        boolean p2Rainbow = playerTwoColor == BluetoothWatchServer.RAINBOW_COLOR_KEY;
-        int c1 = theme != null ? theme.playerPanelFill(playerOneColor) : playerOneColor;
-        int c2 = theme != null ? theme.playerPanelFill(playerTwoColor) : playerTwoColor;
+        RewardCatalog.Reward r1 = RewardCatalog.byKey(playerOneColor);
+        RewardCatalog.Reward r2 = RewardCatalog.byKey(playerTwoColor);
+        boolean p1Rainbow = playerOneColor == BluetoothWatchServer.RAINBOW_COLOR_KEY
+            || (r1 != null && "rainbow".equalsIgnoreCase(r1.id));
+        boolean p2Rainbow = playerTwoColor == BluetoothWatchServer.RAINBOW_COLOR_KEY
+            || (r2 != null && "rainbow".equalsIgnoreCase(r2.id));
+        int c1 = (r1 != null && r1.colors.length > 1) ? playerOneColor
+            : (theme != null ? theme.playerPanelFill(playerOneColor) : playerOneColor);
+        int c2 = (r2 != null && r2.colors.length > 1) ? playerTwoColor
+            : (theme != null ? theme.playerPanelFill(playerTwoColor) : playerTwoColor);
         return BluetoothWatchServer.buildStateJsonLine(
             playerOneName,
             playerTwoName,
