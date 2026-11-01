@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bets_title">Bets</string>
+    <string name="bets_player_title">Bets · %1$s</string>
+    <string name="bets_back">Go back</string>
+    <string name="bets_credits">Credits:</string>
+    <string name="bets_credits_description">Credits: %1$d</string>
+    <string name="bets_history">Bet history</string>
+    <string name="bets_empty_title">No bets yet</string>
+    <string name="bets_empty_description">Your bets will appear here.</string>
+</resources>

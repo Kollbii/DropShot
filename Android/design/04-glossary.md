@@ -9,6 +9,7 @@ This glossary enforces **1 word for 1 meaning** across all screens, buttons, lab
 | **account** | TN | The optional Google user profile used to back up match data to the cloud. | login, user ID, membership |
 | **app** | TN | The DropShot Android software application. | program, software, tool, utility |
 | **backup** | TN | A saved copy of match history and player profiles in the cloud. | archive, snapshot, cloud copy |
+| **bet** | TN | An action planned for the Bets screen. This version does not place bets. | wager, gamble |
 | **Bluetooth** | TN | The wireless technology used by media remote controls and the watch bridge. | BT, wireless link |
 | **button** | Approved (noun) | An interactive control that starts an action when the user taps or presses it. | key (on screen), trigger, cta |
 | **chart** | TN | A visual graph that shows point history or game progress. | graph, plot, diagram, visualization |
@@ -17,6 +18,7 @@ This glossary enforces **1 word for 1 meaning** across all screens, buttons, lab
 | **comparison** | TN | A side-by-side table of statistics for 2 players. | versus view, head-to-head page, matchup |
 | **court** | TN | The squash playing area rented for a fixed duration. | field, pitch, arena, room |
 | **court timer** | TN (2 nouns) | The countdown timer for the court rental duration. | rental clock, booking timer, court alarm |
+| **credits** | TN | The count shown on a player's Bets screen. Each player starts with 1000. | coins, points, money |
 | **data** | Approved (noun) | Saved match records and player profiles. | info, information, content |
 | **duration** | TN | The length of time of a match, a game, or a court rental (in `min` or `s`). | length, span, period |
 | **error** | Approved (noun) | A failure condition that stops an operation. | bug, fault, issue, problem, glitch |

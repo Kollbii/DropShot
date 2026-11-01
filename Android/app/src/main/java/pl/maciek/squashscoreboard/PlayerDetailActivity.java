@@ -11,6 +11,7 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -68,6 +69,10 @@ public class PlayerDetailActivity extends Activity {
         Button cloudBtn = theme.outlinedButton(this, cloudLinked ? "Sync cloud" : "Link cloud");
         cloudBtn.setOnClickListener(v -> showCloudLinkDialog());
 
+        Button bets = theme.outlinedButton(this, getString(R.string.bets_title));
+        bets.setOnClickListener(v -> startActivity(new Intent(this, BetsActivity.class)
+            .putExtra(BetsActivity.EXTRA_PROFILE_ID, profile.id)));
+
         Button edit = theme.tonalButton(this, "Edit player");
         edit.setOnClickListener(v -> startActivity(new Intent(this, PlayerCustomizationActivity.class)
             .putExtra("profile", profile.id)));
@@ -85,12 +90,34 @@ public class PlayerDetailActivity extends Activity {
                 .show()
         );
 
-        header.addView(back, new LinearLayout.LayoutParams(-2, dp(48)));
-        header.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
-        header.addView(cloudBtn, btnMargin());
-        header.addView(edit, btnMargin());
-        if (!RewardInventory.isDeveloper(this, profile.id)) header.addView(del, btnMargin());
-        root.addView(header, new LinearLayout.LayoutParams(-1, dp(52)));
+        boolean portrait = getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT;
+        if (portrait) {
+            header.setOrientation(LinearLayout.VERTICAL);
+            LinearLayout identity = new LinearLayout(this);
+            identity.setGravity(Gravity.CENTER_VERTICAL);
+            identity.addView(back, new LinearLayout.LayoutParams(-2, dp(48)));
+            identity.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
+            header.addView(identity, new LinearLayout.LayoutParams(-1, dp(48)));
+            HorizontalScrollView actionsScroll = new HorizontalScrollView(this);
+            actionsScroll.setHorizontalScrollBarEnabled(false);
+            LinearLayout actions = new LinearLayout(this);
+            actions.setGravity(Gravity.CENTER_VERTICAL);
+            actions.addView(cloudBtn, btnMargin());
+            actions.addView(bets, btnMargin());
+            actions.addView(edit, btnMargin());
+            if (!RewardInventory.isDeveloper(this, profile.id)) actions.addView(del, btnMargin());
+            actionsScroll.addView(actions);
+            header.addView(actionsScroll, new LinearLayout.LayoutParams(-1, dp(52)));
+            root.addView(header, new LinearLayout.LayoutParams(-1, dp(104)));
+        } else {
+            header.addView(back, new LinearLayout.LayoutParams(-2, dp(48)));
+            header.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
+            header.addView(cloudBtn, btnMargin());
+            header.addView(bets, btnMargin());
+            header.addView(edit, btnMargin());
+            if (!RewardInventory.isDeveloper(this, profile.id)) header.addView(del, btnMargin());
+            root.addView(header, new LinearLayout.LayoutParams(-1, dp(52)));
+        }
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout content = box(theme.background);

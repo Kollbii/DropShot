@@ -23,6 +23,7 @@ Players can add points from the court with a Bluetooth remote control or a watch
 | **Review past matches and charts** | Open the History screen to see finished and unfinished matches, point timelines, and game progress charts. |
 | **Compare 2 players** | Open the Players screen to see career win rates, point averages, head-to-head scores, and special point counts (`6-7` and `6-9`). |
 | **Customize player colors** | Open the Players screen to roll the squash lootbox and equip solid, gradient, or animated colors for each profile. |
+| **View player credits** | Open a player profile and tap **Bets** to see the starting credits and bet history. |
 
 ---
 
@@ -70,6 +71,7 @@ Tap the `⌃` button at the bottom of the screen to open the navigation bar.
 | **Add a player profile** | Players | Open **Players** from the navigation bar and tap **Add player**. |
 | **Compare 2 players (head-to-head)** | Players | Open **Players** and tap **Compare players**. |
 | **Edit a player name or color** | Players → Player detail | Tap a player in **Players**, then tap **Edit player**. |
+| **View credits and bet history** | Players → Player detail → Bets | Tap a player in **Players**, then tap **Bets**. |
 | **Unlock new player colors** | Players → Lootbox | Open **Players**, tap **Open lootbox prototype**, and select a player. |
 
 ---
@@ -143,6 +145,12 @@ The app saves up to **100 matches** automatically.
 - Each profile tracks total matches, wins, win rate, total points, average points per match, average points per game, and special `6-7` / `6-9` points.
 - Every player starts with 4 colors: **Blue**, **Red**, **Green**, and **Gold**.
 - Players can open lootboxes to unlock extra solid colors (Green and Gray tiers), gradients (Purple tier), and the animated **Living Rainbow** (Gold tier).
+
+### 4.7 Player credits and bets
+
+- Each saved player profile starts with **1000 Credits**.
+- Open **Players**, select a player, and tap **Bets** to view the credit count.
+- The **Bet history** section is empty until bet actions are added. This version does not place or settle bets.
 
 ---
 

@@ -39,6 +39,10 @@
             android:configChanges="orientation|screenSize"
             android:exported="false" />
         <activity
+            android:name=".BetsActivity"
+            android:configChanges="orientation|screenSize"
+            android:exported="false" />
+        <activity
             android:name=".PlayerCustomizationActivity"
             android:configChanges="orientation|screenSize"
             android:exported="false" />

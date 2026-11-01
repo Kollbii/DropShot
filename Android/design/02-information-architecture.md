@@ -80,10 +80,14 @@ DropShot (Android App)
 │   │   ├── 3.2.1 Player Identity Header (Name, Color Badge, Color Label)
 │   │   ├── 3.2.2 Career Statistics Cards (Matches, Wins, Win Rate, Total Points, Averages, 6-7 / 6-9 points)
 │   │   ├── 3.2.3 Action: Edit Player (Opens Edit Player Dialog)
-│   │   └── 3.2.4 Action: Delete Player (Opens Delete Player Confirmation Dialog)
-│   └── 3.3 Player Comparison Screen
-│       ├── 3.3.1 Side-by-Side Comparison Table (Player 1 vs Player 2 metrics)
-│       └── 3.3.2 Head-to-Head Summary Banner (Direct wins and matches played)
+│   │   ├── 3.2.4 Action: Open Bets (Shows Credits and Bet History)
+│   │   └── 3.2.5 Action: Delete Player (Opens Delete Player Confirmation Dialog)
+│   ├── 3.3 Bets Screen
+│   │   ├── 3.3.1 Credits (1000 for each profile at this stage)
+│   │   └── 3.3.2 Bet History (empty until bet actions are added)
+│   └── 3.4 Player Comparison Screen
+│       ├── 3.4.1 Side-by-Side Comparison Table (Player 1 vs Player 2 metrics)
+│       └── 3.4.2 Head-to-Head Summary Banner (Direct wins and matches played)
 │
 └── 4.0 Settings (Tab 4 - Configuration, Sign-In, and Help)
     ├── 4.1 Settings Screen

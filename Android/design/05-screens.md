@@ -634,7 +634,7 @@ Manage saved player profiles (each with a stable UUID, name, and color), show th
 
 ### 8.3 Components
 - **8A (List):** Top app bar with buttons **Compare players** and **Add player**; scrollable table with sticky header and `56 dp` minimum row height; **Add Player Dialog** and **Compare Players Dialog**.
-- **8B (Profile Detail):** Player identity header with color badge + text color name; 2-column grid of `OutlinedCard` statistics; **Edit player** filled tonal button and **Delete player** error button; **Edit Player Dialog** and **Delete Player Confirmation Dialog**.
+- **8B (Profile Detail):** Player identity header with color badge + text color name; 2-column grid of `OutlinedCard` statistics; **Bets** button between the cloud and edit actions; **Edit player** filled tonal button and **Delete player** error button; **Edit Player Dialog** and **Delete Player Confirmation Dialog**.
 - **8C (Comparison):** 3-column comparison table (`Player 1 | Metric | Player 2`) with tabular numerals and a bottom `SecondaryContainer` banner showing the direct head-to-head record.
 
 ### 8.4 States
@@ -651,7 +651,7 @@ Manage saved player profiles (each with a stable UUID, name, and color), show th
 
 ### 8.5 TalkBack Reading Order
 - **8A (List):** Screen title -> `"Compare players. Button."` -> `"Add player. Button."` -> Each player row read as a complete summary: `"Marek, Color Blue. 12 matches, 8 wins, win rate 67%, 486 points, average 40.5 points per match. Double-tap to open player profile."`
-- **8B (Profile Detail):** `"Go back. Button."` -> `"Player profile: Marek, Color Blue. Heading."` -> Statistics cards in reading order -> `"Edit player. Button."` -> `"Delete player. Button."`
+- **8B (Profile Detail):** `"Go back. Button."` -> player name -> cloud action -> `"Bets. Button."` -> `"Edit player. Button."` -> `"Delete player. Button."` -> statistics cards.
 - **8C (Comparison):** `"Go back. Button."` -> `"Player comparison: Marek versus Anna. Heading."` -> Each comparison row read as `"Matches: Marek 12, Anna 10"` -> `"Head-to-head score: Marek 5, Anna 3, in 8 matches."`
 
 ### 8.6 Exact Screen Text (ASD-STE100)
@@ -686,6 +686,7 @@ Manage saved player profiles (each with a stable UUID, name, and color), show th
 | `pd_avg_games_won` | Stat label | `Average games won per match: %1$s` |
 | `pd_score_67` | Stat label | `Points to 6-7 or 7-6: %1$d` |
 | `pd_score_69` | Stat label | `Points to 6-9 or 9-6: %1$d` |
+| `pd_btn_bets` | Button | `Bets` |
 | `pd_btn_edit` | Button | `Edit player` |
 | `pd_btn_delete` | Button | `Delete player` |
 | **Delete Player Dialog** | Dialog title | `Delete this player profile?` |
@@ -699,6 +700,48 @@ Manage saved player profiles (each with a stable UUID, name, and color), show th
 | `pl_err_dup_name` | Error message (3-part) | `This player name already exists. Each player profile must have a unique name. Enter a different name.` |
 | `pl_err_need_two` | Error message (3-part) | `The app cannot compare players yet. A comparison requires at least 2 player profiles. Tap Add player to create another profile.` |
 | `pl_err_same_two` | Error message (3-part) | `The selected profiles are the same. You must select 2 different player profiles. Select a different profile for Player 2.` |
+
+### 8.7 Bets screen (`BetsActivity`)
+
+**Purpose:** Show the starting credit count and the empty bet history for 1 saved player profile.
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ [Go back]  Bets · [Player name]                              │
+├─────────────────────────────────────────────────────────────┤
+│ Credits:                                               1000 │
+├─────────────────────────────────────────────────────────────┤
+│ Bet history                                                 │
+│                         No bets yet                         │
+│                  Your bets will appear here.                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Components:** One back button, one heading, one credits card, and one history card.
+The screen uses the shared theme and adapts to portrait and landscape.
+
+**States:**
+
+- **Default:** The selected profile has 1000 Credits. The history is empty.
+- **Loading:** No loading state appears. The app shows the local profile immediately.
+- **Empty:** The history card shows `No bets yet` and `Your bets will appear here.`
+- **Error:** If the profile ID is invalid or the profile no longer exists, the screen closes.
+- **Offline:** The screen works without a network connection.
+- **Success:** The app shows the credits and the history card for the selected profile.
+
+**TalkBack order:** `Go back` -> `Bets · [Player name]` -> `Credits: 1000` ->
+`Bet history` -> `No bets yet` -> `Your bets will appear here.`
+
+| Element | Type | Exact text |
+|---|---|---|
+| `bets_back` | Button | `Go back` |
+| `bets_title` | Heading | `Bets · %1$s` |
+| `bets_credits` | Label and value | `Credits: 1000` |
+| `bets_history` | Heading | `Bet history` |
+| `bets_empty_title` | Empty title | `No bets yet` |
+| `bets_empty_description` | Empty description | `Your bets will appear here.` |
+
+This stage does not place or settle bets. The credit count does not change.
 
 ---
 
