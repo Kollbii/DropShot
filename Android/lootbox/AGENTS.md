@@ -38,4 +38,3 @@ See [REWARDS.md](REWARDS.md) for the catalog rules.
 2. Tickets are in memory. A ticket is lost if the activity is destroyed during the spin.
 3. `RewardTilePainter.draw` creates a new `Path` for each call. This is an allocation in `onDraw`. Shaders are cached. Fix the `Path` if you change this class.
 4. `RewardCatalog.configure` indexes `% 6` for animated rewards. An animated reward must have 7 colors (6 plus the first color again).
-5. The README says "no inventory, persistence". This text is old. Inventory and persistence exist.

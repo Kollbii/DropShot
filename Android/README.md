@@ -1,22 +1,53 @@
-# Punkty Squash
+# DropShot — Android Module (`Android/`)
 
-Natywna aplikacja Android do prowadzenia wyniku meczu squasha, przygotowana do użycia w poziomie na tablecie lub telefonie.
+This directory contains the native Android application (`:app`) and the cosmetic lootbox and encryption library (`:lootbox`).
 
-## Aktualne sterowanie
+---
 
-| Pilot Bluetooth | Akcja |
-| --- | --- |
-| Volume + albo następny utwór | Punkt gracza 1 |
-| Volume - albo poprzedni utwór | Punkt gracza 2 |
-| Pauza | Cofnij ostatni punkt |
-| Play / Play-Pause | Nowy mecz (z potwierdzeniem) |
+## 1. Modules
 
-Domyślnie: set do 11 punktów, przewaga dwóch punktów, mecz do trzech wygranych setów. Dotknięcie pola gracza na ekranie także dodaje mu punkt.
+| Module | Path | Package | Description |
+|---|---|---|---|
+| `:app` | `Android/app` | `pl.maciek.squashscoreboard` | Squash scoreboard, Single Hub for History and Players, charts, Bluetooth RFCOMM watch server, and Supabase cloud sync. |
+| `:lootbox` | `Android/lootbox` | `pl.maciek.squashscoreboard.lootbox` | Reward catalog, `SecureRandom` tier roller, HMAC-signed ticket validation, `RewardInventory`, and `SecureStorageEngine` (AES-256-GCM). |
 
-## Otwarcie
+---
 
-Otwórz folder `Android` w Android Studio i uruchom konfigurację `app` na telefonie. Pilot musi być wcześniej sparowany w ustawieniach Bluetooth telefonu. Osobny projekt zegarkowy znajduje się obok, w `../ZeppOS`.
+## 2. Default Bluetooth Remote Controls
 
-Przyciski głośności są przechwytywane tylko gdy ekran aplikacji jest aktywny — dzięki temu nie zmienią przypadkowo głośności podczas meczu.
+> [!WARNING]
+> Volume keys change the score only while the Match screen (`MainActivity`) is open.
 
-Po zbudowaniu gotowy instalator znajduje się w `app/build/outputs/apk/debug/app-debug.apk`. W folderze projektu jest też przeniesiona kopia `Punkty-Squash.apk`.
+| Remote Key | Action |
+|---|---|
+| `Volume +` or `Next Track` | Add 1 point to Player 1 |
+| `Volume -` or `Previous Track` | Add 1 point to Player 2 |
+| `Pause` | Undo the last point |
+| `Play` / `Play-Pause` | Start a new match (asks for confirmation if points exist) |
+
+You can customize these keys in **Settings → Remote keys**.
+
+---
+
+## 3. Build and Test
+
+Run all commands from the repository root (`DropShot/`) or with `gradle -p Android` and JDK 17:
+
+```bash
+# Build and run all unit tests
+gradle -p Android -Dorg.gradle.java.home=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home testDebugUnitTest assembleDebug
+```
+
+The compiled debug APK is written to `Android/app/build/outputs/apk/debug/app-debug.apk`.
+
+---
+
+## 4. Agent Documentation
+
+Read these guides before you modify code in `Android/`:
+
+* [Root AGENTS.md](../AGENTS.md)
+* [Android/AGENTS.md](AGENTS.md)
+* [Android/lootbox/AGENTS.md](lootbox/AGENTS.md)
+* [docs/agents/architecture.md](../docs/agents/architecture.md)
+* [docs/agents/development-guide.md](../docs/agents/development-guide.md)

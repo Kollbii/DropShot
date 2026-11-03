@@ -27,21 +27,21 @@ The app uses a simple layered structure. Keep the layers separate.
 
 | Layer | Classes | Rules |
 |---|---|---|
-| Screens (UI) | `MainActivity`, `HistoryActivity`, `MatchDetailActivity`, `PlayerStatsActivity`, `PlayerDetailActivity`, `PlayerComparisonActivity`, `PlayerCustomizationActivity`, `ChartFullscreenActivity` | Build views in code. Read data from the stores. Do not put score logic or storage logic here. |
+| Screens (UI) | `MainActivity`, `HistoryActivity` (Single Hub), `PlayersPageView`, `SettingsDialog`, `MatchDetailActivity`, `PlayerStatsActivity` (forwarder), `PlayerDetailActivity`, `PlayerComparisonActivity`, `PlayerCustomizationActivity`, `ChartFullscreenActivity` | Build views in code. Read data from the stores. Do not put score logic or storage logic here. |
 | Custom views | `ScoreChartView`, `SetProgressChartView`, `SetsChartView`, `MatchStatsView`, `MatchFinishedView`, `CourtAlertView`, `FireworksView`, `ChartPager` | No allocation and no I/O in `onDraw`. Respect the reduce-motion setting. |
-| Theme | `UiTheme` | The only source of colors, sizes, and shared controls. Do not hardcode new colors in screens. |
+| Theme | `UiTheme` | The only source of colors, sizes, bottom navigation bar (`BottomNavBar`), and shared controls. Do not hardcode new colors in screens. |
 | Domain logic | `MatchState`, `PlayerStatistics`, `MatchRecord` | Pure Java. No Android types. Deterministic. Unit-tested. |
 | Validation | `InputValidator` | All untrusted input goes through this class. |
-| Repositories | `ProfileStore`, `MatchHistoryStore`, `AppPreferences` | In-memory cache for reads. Encrypted, asynchronous writes. |
-| Infrastructure | `AsyncRepositoryExecutor`, `SafeLog`, `WatchCommandServer` | Background I/O, safe logs, loopback bridge. |
+| Repositories | `ProfileStore`, `MatchHistoryStore`, `CloudConfigStore`, `AppPreferences` | In-memory cache for reads. Encrypted, asynchronous writes for personal and game data. |
+| Infrastructure | `AsyncRepositoryExecutor`, `SafeLog`, `WatchCommandServer`, `BluetoothWatchServer`, `SupabaseSyncClient` | Background I/O, safe logs, loopback Zepp bridge, Bluetooth RFCOMM watch bridge, HTTPS PostgREST cloud sync. |
 | Lootbox module | see [lootbox/AGENTS.md](lootbox/AGENTS.md) | The app depends on the module. The module must not depend on the app. |
 
 ### 2.1 Data flow
 
-1. An input event (tap, remote key, watch command) calls `MainActivity.addPoint`.
+1. An input event (tap, remote key, Zepp bridge, or Bluetooth watch command) calls `MainActivity.addPoint`.
 2. `MatchState` changes the score. `MainActivity` records the point time and the game duration.
-3. `refreshScreen()` updates the views.
-4. At the end of a match, or at "Start new match", `archiveCurrentMatch()` writes a `MatchRecord` to `MatchHistoryStore`.
+3. `refreshScreen()` updates the views and broadcasts the latest `STATE` JSON line asynchronously through `BluetoothWatchServer`.
+4. At the end of a match, or at "Start new match", `archiveCurrentMatch()` writes a `MatchRecord` to `MatchHistoryStore`, notifies `BluetoothWatchServer` (`MATCH_ENDED`), and triggers `SupabaseSyncClient.syncAllAsync`.
 5. The store updates its cache at once. It writes the encrypted JSON on the `dropshot-repo-io` thread.
 
 ### 2.2 Persistent data
@@ -50,6 +50,7 @@ The app uses a simple layered structure. Keep the layers separate.
 |---|---|---|---|
 | Player profiles | `ProfileStore` | `profiles` / `items` | Yes |
 | Match history (max. 100) | `MatchHistoryStore` | `match_history` / `records` | Yes |
+| Cloud config and tokens | `CloudConfigStore` | `cloud_config` / `supabase_url`, `supabase_anon_key`, `token_<profileId>` | Yes |
 | Reward unlocks | `RewardInventory` | `reward_inventory` / `encrypted_unlocks_v2` | Yes |
 | Settings (theme, rules, keys, court timer) | `AppPreferences` | `settings` | No (no personal data) |
 
@@ -59,7 +60,7 @@ Rules for persistent data:
 2. Use `opt*` methods with safe defaults when you read JSON.
 3. Clamp all numbers with `InputValidator` when you build a `MatchRecord`.
 4. A player color is stored as an ARGB `int`. It is the first color of a `RewardCatalog.Reward`. Do not change existing keys.
-5. Do not add personal data to `AppPreferences`. Use `SecureStorageEngine`.
+5. Do not add personal data or secret tokens to `AppPreferences`. Use `SecureStorageEngine`.
 
 ## 3. Rules for Java code
 
@@ -75,14 +76,17 @@ Rules for persistent data:
 
 ## 4. Rules for UI changes
 
-1. Read the screen specification in [design/05-screens.md](design/05-screens.md) before you change a screen.
-2. Use `UiTheme` controls: `primaryButton`, `tonalButton`, `outlinedButton`, `dangerButton`, `editField`, `styledSpinner`.
-3. Use the theme colors (`theme.onSurface`, `theme.primary`, …). For a player color, use `playerPanelFill` and `playerAccentOnSurface`.
-4. Give each interactive view a minimum size of 48 dp × 48 dp.
-5. Give each icon-only control a `contentDescription` in STE.
-6. Check the light theme, the dark theme, and the high-contrast mode.
-7. Check portrait and landscape. Activities handle `orientation|screenSize` themselves and rebuild the view.
-8. Use `UiTheme.isReduceMotionEnabled` before you start an animation.
+1. Read the screen specification in [design/05-screens.md](design/05-screens.md) and [../docs/agents/architecture.md](../docs/agents/architecture.md) before you change a screen.
+2. Use the Single Hub pattern in `HistoryActivity`: toggle `HistoryView` and `PlayersPageView` in memory with `View.VISIBLE` and `View.GONE`. Never call `finish()` to switch between History and Players.
+3. Open settings with `SettingsDialog.show(activity, initialTab, onSaveCallback)` on the current activity. Do not launch `MainActivity` to show settings.
+4. Use `UiTheme` controls: `primaryButton`, `tonalButton`, `outlinedButton`, `dangerButton`, `editField`, `styledSpinner`.
+5. Use the theme colors (`theme.onSurface`, `theme.primary`, …). For a player color, use `playerPanelFill` and `playerAccentOnSurface`.
+6. Give each interactive view a minimum size of 48 dp × 48 dp.
+7. Give each icon-only control a `contentDescription` in STE.
+8. Check the light theme, the dark theme, and the high-contrast mode.
+9. Check portrait and landscape. Activities handle `orientation|screenSize` themselves and rebuild the view.
+10. Use `UiTheme.isReduceMotionEnabled` before you start an animation.
+11. Keep `README.md`, `Android/README.md`, `Android/AGENTS.md`, and `../docs/agents/` updated whenever screens, stores, or flows change.
 
 Full rules: [../docs/agents/ui-ux.md](../docs/agents/ui-ux.md).
 
@@ -100,12 +104,12 @@ Full rules: [../docs/agents/ui-ux.md](../docs/agents/ui-ux.md).
 
 ## 6. Android caveats
 
-1. `MainActivity.java` has more than 1,400 lines. Do not add more responsibilities. Extract new logic into a separate class.
-2. The stores use static caches with `volatile boolean initialized`. Data that another process writes is not reloaded.
-3. An asynchronous write can be lost if the process stops at once after the change.
-4. The Settings color list (`UiTheme.playerColors`) shows only the 4 starter colors (profile `null`). Profile colors come from `PlayerCustomizationActivity`.
-5. `colorIndex()` returns `0` (Blue) for a color that is not in the list. This can change a guest color silently.
-6. `MatchRecord` uses `AppPreferences.BLUE` and `RED` as default colors for old records.
+1. `MainActivity.java` has more than 1,000 lines. Do not add more responsibilities. Extract new logic into a separate class (like `SettingsDialog` and `PlayersPageView`).
+2. `PlayerStatsActivity.java` is a compatibility forwarder to `HistoryActivity` (`EXTRA_ACTIVE_TAB = TAB_PLAYERS`). Do not delete it.
+3. The stores use static caches with `volatile boolean initialized`. Data that another process writes is not reloaded.
+4. An asynchronous write can be lost if the process stops at once after the change.
+5. The Settings color list (`UiTheme.playerColors`) shows only the 4 starter colors (profile `null`). Profile colors come from `PlayerCustomizationActivity`.
+6. `colorIndex()` returns `0` (Blue) for a color that is not in the list. This can change a guest color silently.
+7. `MatchRecord` uses `AppPreferences.BLUE` and `RED` as default colors for old records.
 
 More caveats: [../docs/agents/caveats.md](../docs/agents/caveats.md).
-

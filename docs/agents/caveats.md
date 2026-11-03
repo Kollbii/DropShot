@@ -51,7 +51,7 @@ There is no active temporary code.
 
 | # | Description | Severity |
 |---|---|---|
-| C1 | `MainActivity` has more than 1,400 lines (score, clock, court timer, settings dialog, remote keys, watch commands). Extract new features into separate classes. | Medium |
+| C1 | `MainActivity` has more than 1,000 lines (score, clock, court timer, remote keys, watch commands). `SettingsDialog` and `PlayersPageView` are extracted. Extract any new features into separate classes. | Medium |
 | C2 | All UI text is hardcoded in Java. The design specification expects `strings.xml`. Translation is not possible now. | Medium |
 | C3 | `RewardTilePainter.draw` allocates a `Path` for each call (in `onDraw`). | Low |
 | C4 | Animated rewards must have exactly 7 colors. `RewardCatalog.configure` uses `% 6`. | Low |
@@ -62,9 +62,6 @@ There is no active temporary code.
 
 | # | Description | Severity |
 |---|---|---|
-| X1 | `README.md`, `Android/README.md`, and `ZeppOS/README.md` are in Polish. The UI and the design documents are in English. | Low |
-| X2 | `Android/README.md` says the volume keys and Play key do some actions. The current defaults are in `MainActivity.loadStyle` and the Settings screen. Check the code, not the README. | Low |
-| X3 | `Android/lootbox/README.md` says "no inventory, persistence". This is old. Inventory and encrypted persistence exist. | Low |
-| X4 | `Android/lootbox/REWARDS.md` says "The `deweloper` profile can use every reward". This is old. The developer bypass was removed. | Low |
-| X5 | `Android/design/README.md` describes features that do not exist yet (Google sign-in, cloud backup, onboarding, splash). Do not implement them without a request. | Low |
+| X1 | `ZeppOS/README.md` is in Polish. `README.md`, `Android/README.md`, `AndroidWatch/README.md`, `Android/lootbox/README.md`, and the design documents are in English. | Low |
+| X2 | `Android/design/README.md` describes features that do not exist yet (Google sign-in, cloud backup, onboarding, splash). Do not implement them without a request. | Low |
 

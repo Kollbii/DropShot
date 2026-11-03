@@ -163,5 +163,16 @@ Use the `Makefile` in the repository root:
 |---|---|
 | Build phone debug APK | `make build` |
 | Install and run on phone | `make run` |
-| Build watch debug APK | `gradle -p AndroidWatch assembleDebug` |
-| Run all unit tests | `gradle -p Android testDebugUnitTest && gradle -p AndroidWatch testDebugUnitTest` |
+| Build watch debug APK | `gradle -p AndroidWatch -Dorg.gradle.java.home=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home assembleDebug` |
+| Run all unit tests | `gradle -p Android -Dorg.gradle.java.home=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home testDebugUnitTest && gradle -p AndroidWatch -Dorg.gradle.java.home=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home testDebugUnitTest` |
+
+---
+
+## 6. Developer and AI Agent Rules
+
+All contributors and AI agents must follow the project engineering standards:
+
+1. **Read the agent rules first**: Start with [AGENTS.md](AGENTS.md), [Android/AGENTS.md](Android/AGENTS.md), [AndroidWatch/AGENTS.md](AndroidWatch/AGENTS.md), and the detailed guides in [`docs/agents/`](docs/agents/).
+2. **Use a dedicated feature branch**: Never work or commit directly on `master`. Create a branch named `release/n.n.n/feature-name` for each fix or feature, and merge into `master` only after verification and user approval.
+3. **Keep documentation up to date**: Update `README.md`, `AGENTS.md`, module `AGENTS.md` files, and `docs/agents/` in the same branch whenever behavior, screens, protocols, or caveats change.
+
