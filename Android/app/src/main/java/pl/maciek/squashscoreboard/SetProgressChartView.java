@@ -145,8 +145,10 @@ public final class SetProgressChartView extends View {
         String note = recorded ? "MATCH TIME" : "ESTIMATED DURATION FOR OLD RECORD";
         if (selected >= 0) {
             MatchRecord.PointScore score = record.scoreAtPoint(selected);
-            note = "GAME " + score.setNumber + "  " + score.pointsOne + ":" + score.pointsTwo
-                + "  ·  GAMES " + score.setsOne + ":" + score.setsTwo + "  ·  " + formatPrecise(pointTime(selected));
+            String srvName = score.server == 2 ? record.playerTwoName : record.playerOneName;
+            note = "G" + score.setNumber + " " + score.pointsOne + ":" + score.pointsTwo
+                + " · SRV: " + srvName + " [" + score.serviceSide + "] (" + (score.sidePicked ? "PICK" : "ALT") + ") · "
+                + formatPrecise(pointTime(selected));
         }
         canvas.drawText(note, (left + right) / 2, getHeight() - dp(6), paint);
     }
@@ -239,16 +241,26 @@ public final class SetProgressChartView extends View {
             return;
         }
         int[] segment = sets.get(set);
+        if (segment[0] >= segment[1]) return;
         float x0 = left + dp(5) - pan, x1 = left + setWidth - dp(5) - pan;
         long start = segment[0] == 0 ? 0 : pointTime(segment[0] - 1), end = pointTime(segment[1] - 1);
-        double wanted = start + (x - x0) / Math.max(1, x1 - x0) * (end - start), best = Double.MAX_VALUE;
-        for (int i = segment[0]; i < segment[1]; i++) {
-            double difference = Math.abs(pointTime(i) - wanted);
-            if (difference < best) {
-                best = difference;
-                selected = i;
+        double wanted = start + (x - x0) / Math.max(1, x1 - x0) * (end - start);
+        int lo = segment[0], hi = segment[1] - 1;
+        while (lo < hi) {
+            int mid = (lo + hi) >>> 1;
+            if (pointTime(mid) < wanted) {
+                lo = mid + 1;
+            } else {
+                hi = mid;
             }
         }
+        int bestIndex = lo;
+        if (lo > segment[0]) {
+            double diffPrev = Math.abs(pointTime(lo - 1) - wanted);
+            double diffCurr = Math.abs(pointTime(lo) - wanted);
+            if (diffPrev <= diffCurr) bestIndex = lo - 1;
+        }
+        selected = bestIndex;
         invalidate();
     }
 

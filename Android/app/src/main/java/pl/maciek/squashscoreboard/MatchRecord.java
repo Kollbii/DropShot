@@ -9,22 +9,60 @@ import org.json.JSONObject;
 
 /**
  * [MASVS-CODE] [ASVS V4.2 / V5.1]
- * Immutable, schema-validated match record entity.
+ * Immutable, schema-validated match record entity with O(1) precomputed point-state lookup.
  * - Bounds-checks all rule parameters (`pointsToWinSet >= 1`, `setsToWinMatch >= 1`) to prevent
  *   division-by-zero or infinite loops when rendering charts from untrusted JSON / Intent extras.
  * - Caps point history arrays (`MAX_RECORDED_POINTS = 5000`) to prevent OOM/DoS attacks.
+ * - Precomputes cumulative game/point scores and per-rally server/box metadata in a single O(N) pass.
  */
 public final class MatchRecord {
     public final long id, finishedAt, durationMs;
     public final String playerOneName, playerTwoName, playerOneProfileId, playerTwoProfileId;
     public final int playerOneSets, playerTwoSets, playerOnePoints, playerTwoPoints, pointsToWinSet, setsToWinMatch, playerOneColor, playerTwoColor;
+    public final int initialServer;
     public final boolean finished, paused;
     public final ArrayList<Integer> pointWinners;
+    /** Normalized 'R'/'L' service box string for every point in pointWinners. */
+    public final String pointSides;
     /** Elapsed active match time at every scored point; old records can have an empty list. */
     public final ArrayList<Long> pointTimesMs;
     public final ArrayList<Long> setDurationsMs;
 
-    public MatchRecord(long id, String p1, String p2, String p1Id, String p2Id, int s1, int s2, int p1Points, int p2Points, int points, int sets, boolean finished, long timestamp, List<Integer> winners, long duration, List<Long> setDurations, List<Long> pointTimes, boolean paused, int color1, int color2) {
+    // Precomputed O(1) lookup tables
+    private final int computedSetsOne;
+    private final int computedSetsTwo;
+    private final short[] prefixPointsOne;
+    private final short[] prefixPointsTwo;
+    private final byte[] prefixSetsOne;
+    private final byte[] prefixSetsTwo;
+    private final byte[] prefixSetNumber;
+    // Bit 0: server (0 = P1, 1 = P2), Bit 1: side (0 = 'R', 1 = 'L'), Bit 2: sidePicked (1 = picked, 0 = alternating)
+    private final byte[] prefixServeMeta;
+
+    public MatchRecord(
+        long id,
+        String p1,
+        String p2,
+        String p1Id,
+        String p2Id,
+        int s1,
+        int s2,
+        int p1Points,
+        int p2Points,
+        int points,
+        int sets,
+        boolean finished,
+        long timestamp,
+        List<Integer> winners,
+        long duration,
+        List<Long> setDurations,
+        List<Long> pointTimes,
+        boolean paused,
+        int color1,
+        int color2,
+        int initialServer,
+        String rawSides
+    ) {
         this.id = id > 0 ? id : InputValidator.generateSecureMatchId();
         this.playerOneName = InputValidator.sanitizePlayerName(p1, "PLAYER 1");
         this.playerTwoName = InputValidator.sanitizePlayerName(p2, "PLAYER 2");
@@ -42,6 +80,7 @@ public final class MatchRecord {
         this.paused = paused;
         this.playerOneColor = color1;
         this.playerTwoColor = color2;
+        this.initialServer = (initialServer == 2) ? 2 : 1;
 
         this.pointWinners = new ArrayList<>();
         if (winners != null) {
@@ -75,10 +114,84 @@ public final class MatchRecord {
                 }
             }
         }
+
+        int n = this.pointWinners.size();
+        this.prefixPointsOne = new short[n];
+        this.prefixPointsTwo = new short[n];
+        this.prefixSetsOne = new byte[n];
+        this.prefixSetsTwo = new byte[n];
+        this.prefixSetNumber = new byte[n];
+        this.prefixServeMeta = new byte[n];
+
+        StringBuilder normalizedSides = new StringBuilder(n);
+        int curS1 = 0, curS2 = 0, curP1 = 0, curP2 = 0, curSetNum = 1;
+        int prevSrv = this.initialServer;
+        boolean completedSet = false;
+        boolean runningRightBox = true;
+
+        for (int i = 0; i < n; i++) {
+            int srv = (i == 0) ? this.initialServer : this.pointWinners.get(i - 1);
+            boolean picked = (i == 0) || completedSet || (srv != prevSrv);
+            if (completedSet) {
+                curP1 = 0;
+                curP2 = 0;
+                curSetNum++;
+                completedSet = false;
+            }
+            char sideChar = 0;
+            if (rawSides != null && i < rawSides.length()) {
+                char candidate = rawSides.charAt(i);
+                if (candidate == 'R' || candidate == 'L') {
+                    sideChar = candidate;
+                }
+            }
+            if (sideChar == 'R' || sideChar == 'L') {
+                runningRightBox = (sideChar == 'R');
+            } else {
+                if (picked) {
+                    runningRightBox = true;
+                } else {
+                    runningRightBox = !runningRightBox;
+                }
+                sideChar = runningRightBox ? 'R' : 'L';
+            }
+            normalizedSides.append(sideChar);
+
+            int winner = this.pointWinners.get(i);
+            if (winner == 1) curP1++; else curP2++;
+            if (Math.max(curP1, curP2) >= this.pointsToWinSet && Math.abs(curP1 - curP2) >= 2) {
+                if (curP1 > curP2) curS1++; else curS2++;
+                completedSet = true;
+            }
+
+            this.prefixPointsOne[i] = (short) curP1;
+            this.prefixPointsTwo[i] = (short) curP2;
+            this.prefixSetsOne[i] = (byte) Math.min(127, curS1);
+            this.prefixSetsTwo[i] = (byte) Math.min(127, curS2);
+            this.prefixSetNumber[i] = (byte) Math.min(127, curSetNum);
+            int meta = (srv == 2 ? 1 : 0)
+                | (sideChar == 'L' ? 2 : 0)
+                | (picked ? 4 : 0);
+            this.prefixServeMeta[i] = (byte) meta;
+            prevSrv = srv;
+        }
+
+        this.pointSides = normalizedSides.toString();
+        if (n == 0) {
+            this.computedSetsOne = this.playerOneSets;
+            this.computedSetsTwo = this.playerTwoSets;
+        } else {
+            this.computedSetsOne = curS1;
+            this.computedSetsTwo = curS2;
+        }
+    }
+
+    public MatchRecord(long id, String p1, String p2, String p1Id, String p2Id, int s1, int s2, int p1Points, int p2Points, int points, int sets, boolean finished, long timestamp, List<Integer> winners, long duration, List<Long> setDurations, List<Long> pointTimes, boolean paused, int color1, int color2) {
+        this(id, p1, p2, p1Id, p2Id, s1, s2, p1Points, p2Points, points, sets, finished, timestamp, winners, duration, setDurations, pointTimes, paused, color1, color2, 1, null);
     }
 
     public MatchRecord(long id, String p1, String p2, String p1Id, String p2Id, int s1, int s2, int p1Points, int p2Points, int points, int sets, boolean finished, long timestamp, List<Integer> winners, long duration, List<Long> setDurations, List<Long> pointTimes, boolean paused) {
-        this(id, p1, p2, p1Id, p2Id, s1, s2, p1Points, p2Points, points, sets, finished, timestamp, winners, duration, setDurations, pointTimes, paused, AppPreferences.BLUE, AppPreferences.RED);
+        this(id, p1, p2, p1Id, p2Id, s1, s2, p1Points, p2Points, points, sets, finished, timestamp, winners, duration, setDurations, pointTimes, paused, AppPreferences.BLUE, AppPreferences.RED, 1, null);
     }
 
     public MatchRecord(long id, String p1, String p2, String p1Id, String p2Id, int s1, int s2, int p1Points, int p2Points, int points, int sets, boolean finished, long timestamp, List<Integer> winners, long duration, List<Long> setDurations, boolean paused) {
@@ -90,50 +203,74 @@ public final class MatchRecord {
         this(id, p1, p2, null, null, s1, s2, p1Points, p2Points, points, sets, finished, timestamp, winners, 0, Collections.<Long>emptyList(), false);
     }
 
-    /** Reconstruct completed sets so older early-ended records do not count invented sets. */
+    /** O(1) lookup of completed sets so older early-ended records do not count invented sets. */
     public int[] playedSets() {
-        if (pointWinners.isEmpty()) return new int[]{playerOneSets, playerTwoSets};
-        int[] sets = {0, 0};
-        int a = 0, b = 0;
-        for (int winner : pointWinners) {
-            if (winner == 1) a++;
-            else if (winner == 2) b++;
-            if (Math.max(a, b) >= pointsToWinSet && Math.abs(a - b) >= 2) {
-                sets[a > b ? 0 : 1]++;
-                a = 0;
-                b = 0;
-            }
-        }
-        return sets;
+        return new int[]{computedSetsOne, computedSetsTwo};
     }
 
     public int statisticalWinner() {
-        int[] sets = playedSets();
-        if (sets[0] != sets[1]) return sets[0] > sets[1] ? 1 : 2;
+        if (computedSetsOne != computedSetsTwo) return computedSetsOne > computedSetsTwo ? 1 : 2;
         if (playerOnePoints != playerTwoPoints) return playerOnePoints > playerTwoPoints ? 1 : 2;
         return 0;
     }
 
     public static final class PointScore {
         public final int setNumber, setsOne, setsTwo, pointsOne, pointsTwo;
-        private PointScore(int number, int s1, int s2, int p1, int p2) {
-            setNumber = number; setsOne = s1; setsTwo = s2; pointsOne = p1; pointsTwo = p2;
+        public final int server;
+        public final char serviceSide;
+        public final boolean sidePicked;
+
+        private PointScore(int number, int s1, int s2, int p1, int p2, int srv, char side, boolean picked) {
+            setNumber = number;
+            setsOne = s1;
+            setsTwo = s2;
+            pointsOne = p1;
+            pointsTwo = p2;
+            server = srv;
+            serviceSide = side;
+            sidePicked = picked;
         }
     }
 
-    /** Score immediately after the indexed point, including a just-completed set. */
+    /** O(1) lookup of the score and serve metadata at the indexed point. */
     public PointScore scoreAtPoint(int index) {
-        int s1 = 0, s2 = 0, p1 = 0, p2 = 0, setNumber = 1;
-        boolean completed = false;
-        for (int i = 0; i <= index && i < pointWinners.size(); i++) {
-            if (completed) { p1 = 0; p2 = 0; setNumber++; completed = false; }
-            if (pointWinners.get(i) == 1) p1++; else p2++;
-            if (Math.max(p1, p2) >= pointsToWinSet && Math.abs(p1 - p2) >= 2) {
-                if (p1 > p2) s1++; else s2++;
-                completed = true;
-            }
+        int n = pointWinners.size();
+        if (n == 0 || index < 0) {
+            return new PointScore(1, 0, 0, 0, 0, initialServer, 'R', true);
         }
-        return new PointScore(setNumber, s1, s2, p1, p2);
+        int clamped = Math.min(index, n - 1);
+        int meta = prefixServeMeta[clamped] & 0xFF;
+        int srv = (meta & 1) != 0 ? 2 : 1;
+        char side = (meta & 2) != 0 ? 'L' : 'R';
+        boolean picked = (meta & 4) != 0;
+        return new PointScore(
+            prefixSetNumber[clamped] & 0xFF,
+            prefixSetsOne[clamped] & 0xFF,
+            prefixSetsTwo[clamped] & 0xFF,
+            prefixPointsOne[clamped],
+            prefixPointsTwo[clamped],
+            srv,
+            side,
+            picked
+        );
+    }
+
+    /** O(1) lookup of who served at the indexed point (1 or 2). */
+    public int serverAtPoint(int index) {
+        if (index <= 0 || index >= prefixServeMeta.length) return initialServer;
+        return (prefixServeMeta[index] & 1) != 0 ? 2 : 1;
+    }
+
+    /** O(1) lookup of which box ('R' or 'L') was served from at the indexed point. */
+    public char sideAtPoint(int index) {
+        if (index < 0 || index >= prefixServeMeta.length) return 'R';
+        return (prefixServeMeta[index] & 2) != 0 ? 'L' : 'R';
+    }
+
+    /** O(1) lookup of whether the server could freely pick the side at the indexed point. */
+    public boolean isSidePickedAtPoint(int index) {
+        if (index < 0 || index >= prefixServeMeta.length) return true;
+        return (prefixServeMeta[index] & 4) != 0;
     }
 
     public JSONObject toJson() throws JSONException {
@@ -155,6 +292,10 @@ public final class MatchRecord {
         j.put("finished", finished);
         j.put("duration", durationMs);
         j.put("paused", paused);
+        j.put("initSrv", initialServer);
+        if (!pointSides.isEmpty()) {
+            j.put("sides", pointSides);
+        }
         JSONArray a = new JSONArray();
         for (int p : pointWinners) a.put(p);
         j.put("points", a);
@@ -212,7 +353,9 @@ public final class MatchRecord {
             pt,
             j.optBoolean("paused", false),
             j.optInt("color1", AppPreferences.BLUE),
-            j.optInt("color2", AppPreferences.RED)
+            j.optInt("color2", AppPreferences.RED),
+            j.optInt("initSrv", 1),
+            j.optString("sides", null)
         );
     }
 }

@@ -87,7 +87,8 @@ public final class InputValidator {
             || "UNDO".equals(command)
             || "RESET".equals(command)
             || "TOGGLE_PAUSE".equals(command)
-            || "TOGGLE_SIDE".equals(command);
+            || "TOGGLE_SIDE".equals(command)
+            || "SWITCH_SERVER".equals(command);
     }
 }
 

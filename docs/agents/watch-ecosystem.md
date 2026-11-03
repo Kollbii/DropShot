@@ -25,7 +25,8 @@ Encoded as JSON lines (`{"command":"<CMD>"}\n` on RFCOMM, or HTTP `POST /command
 * `POINT_2`: Adds 1 point to Player 2.
 * `UNDO`: Removes the last point.
 * `RESET`: Starts a new match or advances to the next game.
-* `TOGGLE_SIDE`: Toggles serve side between Left `[L]` and Right `[R]`.
+* `TOGGLE_SIDE`: Toggles serve side between Left `[L]` and Right `[R]` (accepted only when `canChooseServiceSide()` is `true`: at `0-0` or immediately after winning a handout).
+* `SWITCH_SERVER`: Switches the starting server between Player 1 and Player 2 (accepted only before the first point of the match when `canSelectInitialServer()` is `true`).
 * `TOGGLE_PAUSE`: Pauses or resumes the match clock.
 
 ### 2.2 Live State Push (Phone → AndroidWatch)
@@ -33,7 +34,7 @@ Encoded as JSON lines (`{"command":"<CMD>"}\n` on RFCOMM, or HTTP `POST /command
 
 1. **Live State (`STATE`)**:
    ```json
-   {"type":"STATE","n1":"KAC","n2":"LUK","p1":8,"p2":6,"s1":1,"s2":0,"targetSets":2,"srv":1,"side":"R","c1":-15435311,"r1":false,"c2":-2604465,"r2":false,"act":"STOP","action":"STOP","ball":false,"fin":false,"paused":false}
+   {"type":"STATE","n1":"KAC","n2":"LUK","p1":8,"p2":6,"s1":1,"s2":0,"targetSets":2,"srv":1,"side":"R","canPickSide":false,"canPickSrv":false,"c1":-15435311,"r1":false,"c2":-2604465,"r2":false,"act":"STOP","action":"STOP","ball":false,"fin":false,"paused":false}
    ```
 2. **Command Acknowledgement (`ACK`)**:
    ```json
@@ -65,10 +66,11 @@ See [`AndroidWatch/AGENTS.md`](file:///Users/kollbi/repos/DropShot/AndroidWatch/
 1. **75 / 25 Layout Split**:
    * The top 75% (`layout_weight="75"`) displays Player 1 and Player 2 score tiles (3-letter initials, game dots `●○`, points, `4 dp` gold active server border, and solid/gradient colors).
    * The bottom 25% (`layout_weight="25"`) displays the `UNDO` button and the `START` / `STOP` / `NEXT` action button (hold `2,000 ms` to send `RESET`).
-2. **Direct Serve-Side Badge Tap (Zero Hold, Zero Lockout)**:
-   * A dedicated full-width × `30 dp` service badge container (`[R]` or `[L]`) sits at the bottom of each player tile.
-   * Tapping the active server's badge container toggles between `[R]` and `[L]` immediately with double-pulse haptics (`0, 30, 45, 30 ms`).
-   * There are no hold-to-change timers and no post-switch touch lockouts on player tiles. Tapping the score area strictly adds 1 point; tapping the badge strictly toggles the serve side.
+2. **Starting Server Selection (`[SERVE]`) and Streak-Locked Serve-Side Badge (`[R]` / `[L]`)**:
+   * A dedicated full-width × `30 dp` service badge container sits at the bottom of each player tile on the watch (and `36 dp` on the phone when enabled in Settings → Appearance).
+   * **Before the first point of the match (`0-0` points, `0-0` games)**: The active starting server shows `[R]` or `[L]`, and the other player's tile shows `[SERVE]`. Tapping `[SERVE]` sends `SWITCH_SERVER` (`selectInitialServer` on the phone) and transfers the starting serve immediately.
+   * **Handout / First Point of Streak (`canPickSide: true`)**: At `0-0` or immediately after a player wins a point on the opponent's serve (handout), the active server can tap `[R]` / `[L]` as many times as desired (`TOGGLE_SIDE`) with double-pulse haptics (`0, 30, 45, 30 ms`).
+   * **During a Serve Streak (`canPickSide: false`)**: Once the server scores a point on their own serve, the `[R]` / `[L]` badge switches to a dimmed red background (`0x66B71C1C` fill, `0x88EF5350` stroke), disables manual clicking/switching, and alternates automatically (`[R]` ↔ `[L]`) after each consecutive point won until the opponent scores a handout.
 3. **Left-Edge Swipe-to-Exit and Touch Slop**:
    * Swiping right from the left screen edge (`startX <= 36 dp`, `dx >= 70 dp`, `dx > 1.5 * dy`) dispatches `ACTION_CANCEL` to child views and exits the app (`finish()`).
    * Touch slop filtering (`>= 8 dp`) on all tiles and buttons prevents accidental points or undo commands during finger drags.

@@ -48,13 +48,16 @@ import pl.maciek.squashscoreboard.lootbox.RewardCatalog;
 public class MainActivity extends Activity {
     private UiTheme theme;
     private int background, surface, foreground, muted, playerOneColor, playerTwoColor, remoteOne, remoteTwo, remoteUndo, remoteReset;
-    private boolean darkTheme, highContrast, paused, awaitingNextGame;
+    private boolean darkTheme, highContrast, showServeSideIndicator = true, paused, awaitingNextGame;
     private final MatchState match = new MatchState();
     private String playerOneName = "PLAYER 1", playerTwoName = "PLAYER 2", playerOneProfileId, playerTwoProfileId;
     private long currentMatchId, matchElapsedMs, currentSetElapsedMs, lastClockMs;
     private final ArrayList<Long> setDurationsMs = new ArrayList<>();
     private final ArrayList<Long> pointTimesMs = new ArrayList<>();
     private TextView playerOnePoints, playerTwoPoints, playerOneSets, playerTwoSets, status, playerOneTitle, playerTwoTitle;
+    private TextView playerOneServeBadge, playerTwoServeBadge;
+    private FrameLayout playerOneServeContainer, playerTwoServeContainer;
+    private GradientDrawable playerOneServeBadgeBg, playerTwoServeBadgeBg;
     private LinearLayout playerOnePanelView, playerTwoPanelView;
     private Button pauseButton, undoButton;
     private TextView pauseOverlay;
@@ -380,6 +383,43 @@ public class MainActivity extends Activity {
         points.setGravity(Gravity.CENTER);
         UiTheme.applyTabularNumbers(points);
 
+        FrameLayout serveContainer = new FrameLayout(this);
+        serveContainer.setMinimumHeight(dp(48));
+        serveContainer.setFilterTouchesWhenObscured(true);
+
+        GradientDrawable serveBadgeBg = new GradientDrawable();
+        serveBadgeBg.setCornerRadius(dp(8));
+        serveBadgeBg.setColor(0x2EFFFFFF);
+        serveBadgeBg.setStroke(dp(1), 0x88FFFFFF);
+
+        TextView serveBadge = text("[R]", 18, Color.WHITE);
+        serveBadge.setTypeface(Typeface.DEFAULT_BOLD);
+        serveBadge.setGravity(Gravity.CENTER);
+        serveBadge.setSingleLine(true);
+        serveBadge.setPadding(dp(14), dp(4), dp(14), dp(4));
+        serveBadge.setBackground(serveBadgeBg);
+
+        FrameLayout.LayoutParams badgeParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        );
+        serveContainer.addView(serveBadge, badgeParams);
+        serveContainer.setOnClickListener(v -> {
+            if (match.isMatchFinished()) return;
+            if (match.getActiveServer() == player) {
+                if (match.canChooseServiceSide() && match.toggleServiceSide()) {
+                    refreshScreen();
+                }
+            } else if (match.canSelectInitialServer()) {
+                if (match.selectInitialServer(player)) {
+                    refreshScreen();
+                }
+            } else {
+                addPoint(player);
+            }
+        });
+
         TextView hint = text("TAP PANEL TO ADD 1 POINT", 16, 0xFFF4F0E9);
         hint.setGravity(Gravity.CENTER);
         hint.setSingleLine(true);
@@ -387,7 +427,8 @@ public class MainActivity extends Activity {
         panel.addView(title, new LinearLayout.LayoutParams(-1, dp(36)));
         panel.addView(sets, new LinearLayout.LayoutParams(-1, dp(38)));
         panel.addView(points, new LinearLayout.LayoutParams(-1, 0, 1));
-        panel.addView(hint, new LinearLayout.LayoutParams(-1, dp(26)));
+        panel.addView(serveContainer, new LinearLayout.LayoutParams(-1, dp(48)));
+        panel.addView(hint, new LinearLayout.LayoutParams(-1, dp(24)));
 
         if (player == 1) {
             playerOnePoints = points;
@@ -395,12 +436,18 @@ public class MainActivity extends Activity {
             playerOneTitle = title;
             playerOneBackground = bg;
             playerOnePanelView = panel;
+            playerOneServeContainer = serveContainer;
+            playerOneServeBadge = serveBadge;
+            playerOneServeBadgeBg = serveBadgeBg;
         } else {
             playerTwoPoints = points;
             playerTwoSets = sets;
             playerTwoTitle = title;
             playerTwoBackground = bg;
             playerTwoPanelView = panel;
+            playerTwoServeContainer = serveContainer;
+            playerTwoServeBadge = serveBadge;
+            playerTwoServeBadgeBg = serveBadgeBg;
         }
         return panel;
     }
@@ -549,10 +596,16 @@ public class MainActivity extends Activity {
             return true;
         }
         if ("TOGGLE_SIDE".equals(command)) {
-            if (match.isMatchFinished()) return false;
-            match.toggleServiceSide();
-            refreshScreen();
-            return true;
+            if (match.isMatchFinished() || !match.canChooseServiceSide()) return false;
+            boolean toggled = match.toggleServiceSide();
+            if (toggled) refreshScreen();
+            return toggled;
+        }
+        if ("SWITCH_SERVER".equals(command)) {
+            if (match.isMatchFinished() || !match.canSelectInitialServer()) return false;
+            boolean switched = match.switchInitialServer();
+            if (switched) refreshScreen();
+            return switched;
         }
         if ("RESET".equals(command)) {
             resetMatchSafely();
@@ -592,6 +645,8 @@ public class MainActivity extends Activity {
             match.getSetsToWinMatch(),
             match.getActiveServer(),
             match.getServiceSide(),
+            match.canChooseServiceSide(),
+            match.canSelectInitialServer(),
             c1,
             p1Rainbow,
             c2,
@@ -731,6 +786,8 @@ public class MainActivity extends Activity {
 
         updateBallBorder(1);
         updateBallBorder(2);
+        updatePhoneServeBadge(1);
+        updatePhoneServeBadge(2);
 
         pauseButton.setText(paused ? "▶" : "Ⅱ");
         pauseButton.setContentDescription(paused ? "Resume match." : "Pause match.");
@@ -831,7 +888,9 @@ public class MainActivity extends Activity {
             pointTimesMs,
             paused,
             playerOneColor,
-            playerTwoColor
+            playerTwoColor,
+            match.getInitialServer(),
+            match.getEncodedPointSides()
         );
     }
 
@@ -871,7 +930,9 @@ public class MainActivity extends Activity {
                 r.playerOneSets,
                 r.playerTwoSets,
                 r.finished,
-                r.pointWinners
+                r.pointWinners,
+                r.initialServer,
+                r.pointSides
             );
             matchElapsedMs = r.durationMs;
             setDurationsMs.clear();
@@ -924,6 +985,7 @@ public class MainActivity extends Activity {
         playerTwoProfileId = AppPreferences.profileTwoId(this);
         playerOneColor = AppPreferences.color(this, "color1", AppPreferences.BLUE);
         playerTwoColor = AppPreferences.color(this, "color2", AppPreferences.RED);
+        showServeSideIndicator = AppPreferences.showServeSideIndicator(this);
         remoteOne = AppPreferences.remote(this, "remote1", KeyEvent.KEYCODE_VOLUME_UP);
         remoteTwo = AppPreferences.remote(this, "remote2", KeyEvent.KEYCODE_VOLUME_DOWN);
         remoteUndo = AppPreferences.remote(this, "undo", KeyEvent.KEYCODE_MEDIA_PAUSE);
@@ -1071,7 +1133,8 @@ public class MainActivity extends Activity {
 
         if (!isBallFor(player) || match.isMatchFinished()) {
             stopBallPulse(player);
-            border.setStroke(dp(3), strokeColor);
+            boolean activeServer = !match.isMatchFinished() && match.getActiveServer() == player;
+            border.setStroke(dp(activeServer ? 5 : 2), strokeColor);
             return;
         }
         if (UiTheme.isReduceMotionEnabled(this)) {
@@ -1091,6 +1154,57 @@ public class MainActivity extends Activity {
         });
         if (player == 1) playerOnePulse = pulse; else playerTwoPulse = pulse;
         pulse.start();
+    }
+
+    private void updatePhoneServeBadge(int player) {
+        FrameLayout container = player == 1 ? playerOneServeContainer : playerTwoServeContainer;
+        TextView badge = player == 1 ? playerOneServeBadge : playerTwoServeBadge;
+        GradientDrawable bg = player == 1 ? playerOneServeBadgeBg : playerTwoServeBadgeBg;
+        if (container == null || badge == null || bg == null) return;
+
+        if (!showServeSideIndicator || match.isMatchFinished()) {
+            container.setVisibility(View.GONE);
+            return;
+        }
+
+        int activeServer = match.getActiveServer();
+        String side = match.getServiceSide();
+        boolean canPickSide = match.canChooseServiceSide();
+        boolean canPickServer = match.canSelectInitialServer();
+
+        if (activeServer == player) {
+            container.setVisibility(View.VISIBLE);
+            badge.setText("[" + side + "]");
+            if (canPickSide) {
+                container.setClickable(true);
+                bg.setColor(0x55000000);
+                bg.setStroke(dp(2), 0xDDFFFFFF);
+                badge.setTextColor(Color.WHITE);
+                container.setContentDescription(
+                    "Serve side " + ("L".equals(side) ? "left" : "right") + ". Tap to switch serve side."
+                );
+            } else {
+                container.setClickable(false);
+                bg.setColor(0x66B71C1C);
+                bg.setStroke(dp(1), 0x88EF5350);
+                badge.setTextColor(0xCCFFCDD2);
+                container.setContentDescription(
+                    "Serve side " + ("L".equals(side) ? "left" : "right") + " locked during serve streak."
+                );
+            }
+        } else if (canPickServer) {
+            container.setVisibility(View.VISIBLE);
+            container.setClickable(true);
+            badge.setText("[SERVE]");
+            bg.setColor(0x44000000);
+            bg.setStroke(dp(1), 0xAAFFFFFF);
+            badge.setTextColor(0xEEFFFFFF);
+            String name = player == 1 ? playerOneName : playerTwoName;
+            container.setContentDescription("Tap to set " + name + " as starting server.");
+        } else {
+            container.setVisibility(View.GONE);
+            container.setClickable(false);
+        }
     }
 
     private void stopBallPulse(int player) {

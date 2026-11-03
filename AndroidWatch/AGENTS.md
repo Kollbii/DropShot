@@ -33,9 +33,9 @@ These rules apply to `AndroidWatch/`. They add to the root [AGENTS.md](../AGENTS
 1. **Service UUID**: `d8095407-4b6d-4765-9b3f-282820000001` (`DropShotWatchBridge`).
 2. **No retries**: `BluetoothWatchClient.sendCommand` must never queue, replay, or retry a failed command. A late point is forbidden.
 3. **Permitted commands** (watch → phone):
-   `POINT_1`, `POINT_2`, `UNDO`, `RESET`, `TOGGLE_PAUSE`, `TOGGLE_SIDE` (encoded as `{"command":"<CMD>"}\n`).
+   `POINT_1`, `POINT_2`, `UNDO`, `RESET`, `TOGGLE_PAUSE`, `TOGGLE_SIDE`, `SWITCH_SERVER` (encoded as `{"command":"<CMD>"}\n`).
 4. **Incoming messages** (phone → watch):
-   - `STATE`: Live score, initials (`n1`, `n2`), points (`p1`, `p2`), games (`s1`, `s2`, `targetSets`), server (`srv`), serve side (`side`), colors (`c1`, `r1`, `c2`, `r2`), action label (`act`), game/match ball (`ball`), finished (`fin`), and paused (`paused`).
+   - `STATE`: Live score, initials (`n1`, `n2`), points (`p1`, `p2`), games (`s1`, `s2`, `targetSets`), server (`srv`), serve side (`side`), side-choice unlocked (`canPickSide`), starting-server choice unlocked (`canPickSrv`), colors (`c1`, `r1`, `c2`, `r2`), action label (`act`), game/match ball (`ball`), finished (`fin`), and paused (`paused`).
    - `ACK`: Command acknowledgement (`{"type":"ACK","accepted":true,"ball":false}`).
    - `MATCH_ENDED`: Winner overlay trigger (`{"type":"MATCH_ENDED","winner":"...","score":"2 - 0"}`).
 5. **Bounded reads**: Keep the 1,024-byte line cap in `readBoundedLine` to prevent out-of-memory errors.
@@ -46,10 +46,11 @@ These rules apply to `AndroidWatch/`. They add to the root [AGENTS.md](../AGENTS
 1. **75 / 25 vertical screen split**:
    - Top 75% (`layout_weight="75"`): Player 1 and Player 2 score tiles.
    - Bottom 25% (`layout_weight="25"`): `UNDO` button and `START` / `STOP` / `NEXT` action button.
-2. **Direct serve-side badge tap (no hold, no lockout)**:
-   - Each player tile has a dedicated full-width × `30 dp` service badge container (`[R]` or `[L]`) at the bottom.
-   - Tapping the active server's `[R]` / `[L]` badge container immediately sends `TOGGLE_SIDE` and vibrates a double-haptic pulse (`0, 30, 45, 30 ms`).
-   - Do not add hold-to-switch timers or post-switch touch lockouts on player tiles. Tapping the score area strictly adds 1 point; tapping the badge strictly toggles the serve side.
+2. **Starting server selection (`[SERVE]`) and streak-locked serve-side badge (`[R]` / `[L]`)**:
+   - Each player tile has a dedicated full-width × `30 dp` service badge container at the bottom.
+   - At `0-0` points and `0-0` games (`canPickSrv: true`), the starting server's tile shows `[R]` or `[L]` and the non-server's tile shows `[SERVE]`. Tapping `[SERVE]` sends `SWITCH_SERVER` to switch the starting server.
+   - When `canPickSide: true` (at `0-0` or immediately after winning a handout), tapping the active server's `[R]` / `[L]` badge container sends `TOGGLE_SIDE` and vibrates a double-haptic pulse (`0, 30, 45, 30 ms`).
+   - When `canPickSide: false` (after the server scores a point on their own serve), the `[R]` / `[L]` badge shows a dimmed red background (`0x66B71C1C`), disables manual clicking/switching, and alternates automatically (`[R]` ↔ `[L]`) on each consecutive point won.
 3. **Action button hold for reset**:
    - Tapping the bottom-right button (`START` / `STOP` / `NEXT`) sends `TOGGLE_PAUSE`.
    - Holding the button shows `HOLD 2S` after `400 ms` and sends `RESET` at `2,000 ms`.

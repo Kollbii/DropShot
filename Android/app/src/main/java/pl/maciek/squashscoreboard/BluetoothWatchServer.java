@@ -328,6 +328,51 @@ final class BluetoothWatchServer {
         boolean matchFinished,
         boolean paused
     ) {
+        boolean canSelectSrv = p1Points == 0 && p2Points == 0 && p1Sets == 0 && p2Sets == 0 && !matchFinished;
+        return buildStateJsonLine(
+            playerOneName,
+            playerTwoName,
+            p1Points,
+            p2Points,
+            p1Sets,
+            p2Sets,
+            setsToWinMatch,
+            activeServer,
+            serviceSide,
+             !matchFinished,
+            canSelectSrv,
+            p1Color,
+            p1Rainbow,
+            p2Color,
+            p2Rainbow,
+            actionLabel,
+            gameOrMatchBall,
+            matchFinished,
+            paused
+        );
+    }
+
+    static String buildStateJsonLine(
+        String playerOneName,
+        String playerTwoName,
+        int p1Points,
+        int p2Points,
+        int p1Sets,
+        int p2Sets,
+        int setsToWinMatch,
+        int activeServer,
+        String serviceSide,
+        boolean canChooseSide,
+        boolean canSelectServer,
+        int p1Color,
+        boolean p1Rainbow,
+        int p2Color,
+        boolean p2Rainbow,
+        String actionLabel,
+        boolean gameOrMatchBall,
+        boolean matchFinished,
+        boolean paused
+    ) {
         String n1 = escapeJson(extractInitials(playerOneName, "PL1"));
         String n2 = escapeJson(extractInitials(playerTwoName, "PL2"));
         String side = "L".equals(serviceSide) ? "L" : "R";
@@ -342,6 +387,8 @@ final class BluetoothWatchServer {
             + ",\"targetSets\":" + Math.max(1, setsToWinMatch)
             + ",\"srv\":" + (activeServer == 2 ? 2 : 1)
             + ",\"side\":\"" + side + "\""
+            + ",\"canPickSide\":" + canChooseSide
+            + ",\"canPickSrv\":" + canSelectServer
             + ",\"c1\":" + p1Color
             + ",\"r1\":" + p1Rainbow
             + ",\"c2\":" + p2Color

@@ -19,6 +19,7 @@ public final class WatchProtocolTest {
         assertTrue(WatchProtocol.isAllowedCommand("RESET"));
         assertTrue(WatchProtocol.isAllowedCommand("TOGGLE_PAUSE"));
         assertTrue(WatchProtocol.isAllowedCommand("TOGGLE_SIDE"));
+        assertTrue(WatchProtocol.isAllowedCommand("SWITCH_SERVER"));
         assertFalse(WatchProtocol.isAllowedCommand("INVALID"));
         assertFalse(WatchProtocol.isAllowedCommand(null));
 
@@ -26,6 +27,7 @@ public final class WatchProtocolTest {
         assertEquals("{\"command\":\"RESET\"}\n", WatchProtocol.encodeCommandLine("RESET"));
         assertEquals("{\"command\":\"TOGGLE_PAUSE\"}\n", WatchProtocol.encodeCommandLine("TOGGLE_PAUSE"));
         assertEquals("{\"command\":\"TOGGLE_SIDE\"}\n", WatchProtocol.encodeCommandLine("TOGGLE_SIDE"));
+        assertEquals("{\"command\":\"SWITCH_SERVER\"}\n", WatchProtocol.encodeCommandLine("SWITCH_SERVER"));
     }
 
     @Test
@@ -45,7 +47,8 @@ public final class WatchProtocolTest {
     @Test
     public void parsesWatchStateJsonSafely() {
         String json = "{\"type\":\"STATE\",\"n1\":\"KAC\",\"n2\":\"ŁUK\",\"p1\":9,\"p2\":8,\"s1\":1,\"s2\":0,"
-            + "\"targetSets\":2,\"srv\":2,\"side\":\"L\",\"c1\":-13665034,\"r1\":false,\"c2\":-44967,\"r2\":true,"
+            + "\"targetSets\":2,\"srv\":2,\"side\":\"L\",\"canPickSide\":false,\"canPickSrv\":false,"
+            + "\"c1\":-13665034,\"r1\":false,\"c2\":-44967,\"r2\":true,"
             + "\"act\":\"STOP\",\"ball\":true,\"fin\":false,\"paused\":false}";
 
         WatchProtocol.WatchState state = WatchProtocol.parseWatchState(json);
@@ -59,6 +62,8 @@ public final class WatchProtocolTest {
         assertEquals(2, state.targetSets);
         assertEquals(2, state.activeServer);
         assertEquals("L", state.serviceSide);
+        assertFalse(state.canChooseSide);
+        assertFalse(state.canSelectServer);
         assertEquals(-13665034, state.playerOneColor);
         assertFalse(state.playerOneRainbow);
         assertEquals(-44967, state.playerTwoColor);
@@ -67,6 +72,14 @@ public final class WatchProtocolTest {
         assertTrue(state.gameOrMatchBall);
         assertFalse(state.matchFinished);
         assertFalse(state.paused);
+
+        // Verify 0-0 initial state defaults canSelectServer and canChooseSide to true
+        String zeroStateJson = "{\"type\":\"STATE\",\"n1\":\"P1\",\"n2\":\"P2\",\"p1\":0,\"p2\":0,\"s1\":0,\"s2\":0,"
+            + "\"targetSets\":2,\"srv\":1,\"side\":\"R\",\"canPickSide\":true,\"canPickSrv\":true}";
+        WatchProtocol.WatchState zeroState = WatchProtocol.parseWatchState(zeroStateJson);
+        assertNotNull(zeroState);
+        assertTrue(zeroState.canChooseSide);
+        assertTrue(zeroState.canSelectServer);
 
         assertNull(WatchProtocol.parseWatchState("{\"type\":\"OTHER\"}"));
         assertNull(WatchProtocol.parseWatchState("invalid"));

@@ -28,9 +28,9 @@ The app uses a simple layered structure. Keep the layers separate.
 | Layer | Classes | Rules |
 |---|---|---|
 | Screens (UI) | `MainActivity`, `HistoryActivity` (Single Hub), `PlayersPageView`, `SettingsDialog`, `MatchDetailActivity`, `PlayerStatsActivity` (forwarder), `PlayerDetailActivity`, `PlayerComparisonActivity`, `PlayerCustomizationActivity`, `ChartFullscreenActivity` | Build views in code. Read data from the stores. Do not put score logic or storage logic here. |
-| Custom views | `ScoreChartView`, `SetProgressChartView`, `SetsChartView`, `MatchStatsView`, `MatchFinishedView`, `CourtAlertView`, `FireworksView`, `ChartPager` | No allocation and no I/O in `onDraw`. Respect the reduce-motion setting. |
+| Custom views | `ScoreChartView`, `SetProgressChartView`, `SetsChartView`, `MatchStatsView`, `MatchFinishedView`, `CourtAlertView`, `FireworksView`, `ChartPager` | No allocation and no I/O in `onDraw`. Respect the reduce-motion setting. Use $O(\log N)$ binary search for point inspection and $O(1)$ `MatchRecord` prefix lookups. |
 | Theme | `UiTheme` | The only source of colors, sizes, bottom navigation bar (`BottomNavBar`), and shared controls. Do not hardcode new colors in screens. |
-| Domain logic | `MatchState`, `PlayerStatistics`, `MatchRecord` | Pure Java. No Android types. Deterministic. Unit-tested. |
+| Domain logic | `MatchState`, `PlayerStatistics`, `MatchRecord` | Pure Java. No Android types. Deterministic. Unit-tested. `MatchRecord` precomputes $O(1)$ point/set/serve/side prefix tables; `PlayerStatistics.calculateAll` aggregates in $O(P + M \cdot N)$ time. |
 | Validation | `InputValidator` | All untrusted input goes through this class. |
 | Repositories | `ProfileStore`, `MatchHistoryStore`, `CloudConfigStore`, `AppPreferences` | In-memory cache for reads. Encrypted, asynchronous writes for personal and game data. |
 | Infrastructure | `AsyncRepositoryExecutor`, `SafeLog`, `WatchCommandServer`, `BluetoothWatchServer`, `SupabaseSyncClient` | Background I/O, safe logs, loopback Zepp bridge, Bluetooth RFCOMM watch bridge, HTTPS PostgREST cloud sync. |

@@ -58,7 +58,9 @@ Tap the `⌃` button at the bottom of the screen to open the navigation bar.
 |---|---|---|
 | **Add 1 point** | Match | Tap Player 1 or Player 2, press the remote key, or tap the watch tile. |
 | **Undo the last point** | Match | Tap `↶` in the top bar, press Undo on the remote, or tap `UNDO` on the watch. |
-| **Toggle serve side** | Match / Watch | Tap the server panel on the phone, or tap `[R]` / `[L]` on the watch. |
+| **Select starting server (`0-0`)** | Match / Watch | Before the first point of the match, tap `[SERVE]` on the non-server panel or watch tile to switch who serves first. |
+| **Toggle serve side (`[R]` / `[L]`)** | Match / Watch | At `0-0` or immediately after winning a handout, tap `[R]` / `[L]` on the phone or watch to switch sides freely. After scoring a point on your own serve, the badge turns dimmed red, locks manual switching, and alternates `[R]` ↔ `[L]` automatically. |
+| **Hide serve badge on phone** | Settings → Appearance | Toggle **Show serve side indicator ([R] / [L]) on phone** in **Settings → Appearance** (the watch indicator stays active). |
 | **Pause or resume match** | Match | Tap `Ⅱ` / `▶` in the top bar, or tap the pause overlay. |
 | **Start a new match** | Match | Tap `↺` in the top bar, or hold `RESET` on the watch. |
 | **Start or stop court timer** | Match | Tap **Start court timer** in the top-left corner. |
@@ -82,7 +84,9 @@ Tap the `⌃` button at the bottom of the screen to open the navigation bar.
 - By default, a player wins a game at **11 points** with a **2-point lead**.
 - By default, a player wins the match at **3 games**.
 - You can change both numbers in **Settings → Players & rules**.
-- The active server shows a highlight border and serve side (`[R]` or `[L]`).
+- The active server shows a highlight border and serve side (`[R]` or `[L]`). Before the first point (`0-0` in Game 1), the other player shows `[SERVE]` so you can choose the starting server.
+- On a new service turn (handout or `0-0`), the server can tap `[R]` / `[L]` as many times as desired. After the server wins a point on their own serve, the `[R]` / `[L]` badge shows a dimmed red background, locks manual switching, and alternates `[R]` ↔ `[L]` automatically after each consecutive point.
+- You can hide the `[R]` / `[L]` badge on the phone only in **Settings → Appearance** (`Show serve side indicator ([R] / [L]) on phone`).
 - When 1 point wins a game or the match, the top bar shows **GAME BALL** or **MATCH BALL**.
 - When the score reaches `6-7`, `7-6`, `6-9`, or `9-6`, the screen shows animations.
 
@@ -112,7 +116,7 @@ Tap the `⌃` button at the bottom of the screen to open the navigation bar.
 The `AndroidWatch/` module provides a standalone remote for Android Wear watches (API 20+):
 - **75/25 screen split**: Top 75% displays the two player tiles. Bottom 25% holds the `UNDO` and `RESET` buttons.
 - **Score tiles**: Tap a tile to add 1 point.
-- **Serve side badge (`[R]` / `[L]`)**: Tap directly to toggle the serve side. It never triggers a point.
+- **Starting server (`[SERVE]`) & Serve side badge (`[R]` / `[L]`)**: At `0-0`, tap `[SERVE]` on the non-server tile to switch the starting server. Tap `[R]` / `[L]` on a handout turn to choose your serve box; once you score on your own serve, the badge turns dimmed red, locks manual switching, and alternates automatically.
 - **Cosmetics**: Displays unlocked player colors and gradients (Purple and Living Rainbow) on the score.
 - **Reactions**: Shows quick graphic animations when the score reaches `6-7` (Cat) or `6-9` (Shrek).
 - **Swipe to exit**: Swipe right from the left screen edge to exit smoothly to the watch face.
@@ -133,14 +137,14 @@ The `ZeppOS/` directory provides 2 watch apps:
 
 ### 4.5 Match history and charts
 
-- Saves up to **100 matches** automatically.
+- Saves up to **100 matches** automatically, including point-by-point server and court side (`[R]` / `[L]`).
 - Filter by **All**, **Finished**, or **Unfinished**.
 - Tap **Resume match** on an unfinished match to continue play.
-- Match details include 4 tabs: point timeline, game progress, games summary, and match statistics.
+- Match details include 4 tabs: point timeline (tap any point to inspect score, server, `[R]`/`[L]` box, and `PICK` vs `ALT`), game progress, games summary, and match statistics (including Serve Hold Rate, Side-Out Rate, Markov Serve Share, `[R]`/`[L]` pick counts & win rates, and a Point-by-Point Serve & Court Side Log).
 
 ### 4.6 Player profiles, statistics, and cosmetics
 
-- Tracks career matches, wins, win rates, averages, and special score counts.
+- Tracks career matches, wins, win rates, Bayesian Laplace win probability, Wilson 95% lower-bound rating, Serve Hold Rate, Side-Out Rate, Markov steady-state serve share, `[R]` / `[L]` side pick preferences & win rates, averages, and special score counts (`6-7` / `6-9`).
 - Unlock extra colors through the squash lootbox: Green, Gray, Purple gradients, and Living Rainbow.
 - Tap **Sync cloud** in the Players screen to sync unlocked cosmetics through Supabase.
 

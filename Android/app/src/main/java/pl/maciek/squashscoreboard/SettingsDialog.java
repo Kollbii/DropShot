@@ -89,8 +89,10 @@ public final class SettingsDialog {
 
         CheckBox darkBox = checkBox(activity, "Use dark theme", AppPreferences.dark(activity), foreground);
         CheckBox hcBox = checkBox(activity, "Use high-contrast mode", AppPreferences.highContrast(activity), foreground);
+        CheckBox serveSideBox = checkBox(activity, "Show serve side indicator ([R] / [L]) on phone", AppPreferences.showServeSideIndicator(activity), foreground);
         appearanceForm.addView(darkBox);
         appearanceForm.addView(hcBox);
+        appearanceForm.addView(serveSideBox);
 
         int curPilotOne = AppPreferences.remote(activity, "remote1", KeyEvent.KEYCODE_VOLUME_UP);
         int curPilotTwo = AppPreferences.remote(activity, "remote2", KeyEvent.KEYCODE_VOLUME_DOWN);
@@ -160,7 +162,7 @@ public final class SettingsDialog {
         settingsContent.addView(pageFrame, new LinearLayout.LayoutParams(-1, pageHeight));
         View[] settingsInputs = {
             profileOne, profileTwo, nameOne, nameTwo, points, sets,
-            darkBox, hcBox, colorOne, colorTwo, pilotOne, pilotTwo, pilotUndo, pilotReset,
+            darkBox, hcBox, serveSideBox, colorOne, colorTwo, pilotOne, pilotTwo, pilotUndo, pilotReset,
             duration, green, yellow, red, vibration
         };
         String baseline = settingsSignature(settingsInputs);
@@ -182,7 +184,7 @@ public final class SettingsDialog {
             save.setOnClickListener(v -> {
                 if (saveSettings(
                     activity, profiles, profileOne, profileTwo, nameOne, nameTwo,
-                    points, sets, darkBox, hcBox, colorOne, colorTwo,
+                    points, sets, darkBox, hcBox, serveSideBox, colorOne, colorTwo,
                     pilotOne, pilotTwo, pilotUndo, pilotReset,
                     duration, green, yellow, red, vibration
                 )) {
@@ -206,6 +208,7 @@ public final class SettingsDialog {
         EditText sets,
         CheckBox darkBox,
         CheckBox hcBox,
+        CheckBox serveSideBox,
         Spinner colorOne,
         Spinner colorTwo,
         Spinner pilotOne,
@@ -260,6 +263,7 @@ public final class SettingsDialog {
                 remoteAt(pilotTwo.getSelectedItemPosition())
             );
             AppPreferences.saveAppearance(activity, darkBox.isChecked(), hcBox.isChecked());
+            AppPreferences.saveShowServeSideIndicator(activity, serveSideBox.isChecked());
             AppPreferences.saveRules(activity, pts, sts);
             AppPreferences.saveExtra(
                 activity,

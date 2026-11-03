@@ -51,6 +51,15 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
     private static final int ACTIVE_SERVER_BORDER_COLOR = 0xFFFFD54F;
     private static final int INACTIVE_SERVER_BORDER_COLOR = 0x66FFFFFF;
 
+    private static final int BADGE_UNLOCKED_FILL = 0x2EFFFFFF;
+    private static final int BADGE_UNLOCKED_PRESSED = 0x55FFFFFF;
+    private static final int BADGE_UNLOCKED_RIM = 0x88FFFFFF;
+    private static final int BADGE_LOCKED_FILL = 0x66B71C1C;
+    private static final int BADGE_LOCKED_RIM = 0x99EF5350;
+    private static final int BADGE_LOCKED_TEXT = 0xCCFFCDD2;
+    private static final int BADGE_SERVE_PICK_FILL = 0x24FFFFFF;
+    private static final int BADGE_SERVE_PICK_RIM = 0x66FFFFFF;
+
     private static final int STATUS_CONNECTED_COLOR = 0xFF39B87F;
     private static final int STATUS_DISCONNECTED_COLOR = 0xFFF1636E;
     private static final int STATUS_RECONNECTING_COLOR = 0xFFFFD54F;
@@ -85,12 +94,14 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
     private TextView p1HeaderView;
     private TextView p1PointsView;
     private TextView p1ServiceSideView;
+    private GradientDrawable p1ServiceBadgeBg;
 
     private LinearLayout p2Tile;
     private GradientDrawable p2TileBg;
     private TextView p2HeaderView;
     private TextView p2PointsView;
     private TextView p2ServiceSideView;
+    private GradientDrawable p2ServiceBadgeBg;
 
     // Score reaction badges (Cat 6-7, Shrek 6-9)
     private ImageView reactionBadgeView;
@@ -457,16 +468,24 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
             1f
         ));
 
-        // Dedicated service side badge container (Option B: tap to toggle side)
+        // Dedicated service side badge container (Option A at 0-0 + streak lock)
         FrameLayout serviceBadgeContainer = new FrameLayout(this);
         serviceBadgeContainer.setClickable(true);
         serviceBadgeContainer.setFocusable(true);
-        serviceBadgeContainer.setContentDescription("Tap to toggle serve side between right and left.");
+        serviceBadgeContainer.setContentDescription("Tap to toggle serve side or select starting server.");
 
-        GradientDrawable badgeBg = new GradientDrawable();
+        final GradientDrawable badgeBg = new GradientDrawable();
         badgeBg.setCornerRadius(dp(6));
-        badgeBg.setColor(Color.TRANSPARENT);
-        serviceBadgeContainer.setBackground(badgeBg);
+        badgeBg.setColor(BADGE_UNLOCKED_FILL);
+        badgeBg.setStroke(dp(1), BADGE_UNLOCKED_RIM);
+        if (playerNumber == 1) {
+            p1ServiceBadgeBg = badgeBg;
+        } else {
+            p2ServiceBadgeBg = badgeBg;
+        }
+
+        serviceSideView.setPadding(dp(8), dp(2), dp(8), dp(2));
+        serviceSideView.setBackground(badgeBg);
 
         FrameLayout.LayoutParams badgeTextParams = new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -485,57 +504,90 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         final boolean[] badgeDragDetected = new boolean[1];
 
         serviceBadgeContainer.setOnTouchListener((v, event) -> {
-            if (playerNumber != currentState.activeServer) {
+            boolean isServer = (playerNumber == currentState.activeServer);
+            if (!isServer && !currentState.canSelectServer) {
                 return false;
+            }
+            if (isServer && !currentState.canChooseSide) {
+                // Locked during a server streak: consume touch so it does not add a point or switch side
+                return true;
             }
             int action = event.getActionMasked();
             if (action == MotionEvent.ACTION_DOWN) {
                 badgeDownCoords[0] = event.getX();
                 badgeDownCoords[1] = event.getY();
                 badgeDragDetected[0] = false;
-                badgeBg.setColor(0x44FFFFFF);
+                badgeBg.setColor(BADGE_UNLOCKED_PRESSED);
                 return true;
             } else if (action == MotionEvent.ACTION_MOVE) {
                 if (!badgeDragDetected[0]) {
                     if (WatchProtocol.isTouchMovementExceeded(badgeDownCoords[0], event.getX(), badgeDownCoords[1], event.getY(), touchSlopPx)) {
                         badgeDragDetected[0] = true;
-                        badgeBg.setColor(Color.TRANSPARENT);
+                        applyWatchState(currentState);
                     }
                 }
                 return true;
             } else if (action == MotionEvent.ACTION_UP) {
-                badgeBg.setColor(Color.TRANSPARENT);
                 if (!badgeDragDetected[0]) {
                     vibratePattern(VIBRATE_DOUBLE_HAPTIC);
-                    if (watchClient != null) {
-                        watchClient.sendCommand(WatchProtocol.CMD_TOGGLE_SIDE);
+                    if (isServer) {
+                        if (watchClient != null) {
+                            watchClient.sendCommand(WatchProtocol.CMD_TOGGLE_SIDE);
+                        }
+                        String newSide = "R".equals(currentState.serviceSide) ? "L" : "R";
+                        currentState = new WatchProtocol.WatchState(
+                            currentState.playerOneInitials,
+                            currentState.playerTwoInitials,
+                            currentState.playerOnePoints,
+                            currentState.playerTwoPoints,
+                            currentState.playerOneSets,
+                            currentState.playerTwoSets,
+                            currentState.targetSets,
+                            currentState.activeServer,
+                            newSide,
+                            currentState.canChooseSide,
+                            currentState.canSelectServer,
+                            currentState.playerOneColor,
+                            currentState.playerOneRainbow,
+                            currentState.playerTwoColor,
+                            currentState.playerTwoRainbow,
+                            currentState.actionLabel,
+                            currentState.gameOrMatchBall,
+                            currentState.matchFinished,
+                            currentState.paused
+                        );
+                    } else {
+                        if (watchClient != null) {
+                            watchClient.sendCommand(WatchProtocol.CMD_SWITCH_SERVER);
+                        }
+                        currentState = new WatchProtocol.WatchState(
+                            currentState.playerOneInitials,
+                            currentState.playerTwoInitials,
+                            currentState.playerOnePoints,
+                            currentState.playerTwoPoints,
+                            currentState.playerOneSets,
+                            currentState.playerTwoSets,
+                            currentState.targetSets,
+                            playerNumber,
+                            "R",
+                            true,
+                            true,
+                            currentState.playerOneColor,
+                            currentState.playerOneRainbow,
+                            currentState.playerTwoColor,
+                            currentState.playerTwoRainbow,
+                            currentState.actionLabel,
+                            currentState.gameOrMatchBall,
+                            currentState.matchFinished,
+                            currentState.paused
+                        );
                     }
-                    String newSide = "R".equals(currentState.serviceSide) ? "L" : "R";
-                    currentState = new WatchProtocol.WatchState(
-                        currentState.playerOneInitials,
-                        currentState.playerTwoInitials,
-                        currentState.playerOnePoints,
-                        currentState.playerTwoPoints,
-                        currentState.playerOneSets,
-                        currentState.playerTwoSets,
-                        currentState.targetSets,
-                        currentState.activeServer,
-                        newSide,
-                        currentState.playerOneColor,
-                        currentState.playerOneRainbow,
-                        currentState.playerTwoColor,
-                        currentState.playerTwoRainbow,
-                        currentState.actionLabel,
-                        currentState.gameOrMatchBall,
-                        currentState.matchFinished,
-                        currentState.paused
-                    );
-                    serviceSideView.setText("[" + newSide + "]");
                 }
+                applyWatchState(currentState);
                 return true;
             } else if (action == MotionEvent.ACTION_CANCEL) {
-                badgeBg.setColor(Color.TRANSPARENT);
                 badgeDragDetected[0] = false;
+                applyWatchState(currentState);
                 return true;
             }
             return false;
@@ -807,15 +859,22 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         boolean p1Serves = state.activeServer == 1;
         String sideTag = "[" + state.serviceSide + "]";
 
-        p1ServiceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        p1ServiceSideView.setTextColor(Color.WHITE);
-        p1ServiceSideView.setText(p1Serves ? sideTag : "");
-        p1ServiceSideView.setVisibility(p1Serves ? View.VISIBLE : View.INVISIBLE);
-
-        p2ServiceSideView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        p2ServiceSideView.setTextColor(Color.WHITE);
-        p2ServiceSideView.setText(!p1Serves ? sideTag : "");
-        p2ServiceSideView.setVisibility(!p1Serves ? View.VISIBLE : View.INVISIBLE);
+        applyServiceBadgeStyle(
+            p1ServiceSideView,
+            p1ServiceBadgeBg,
+            p1Serves,
+            sideTag,
+            state.canChooseSide,
+            state.canSelectServer
+        );
+        applyServiceBadgeStyle(
+            p2ServiceSideView,
+            p2ServiceBadgeBg,
+            !p1Serves,
+            sideTag,
+            state.canChooseSide,
+            state.canSelectServer
+        );
 
         applyTileBackground(p1TileBg, state.playerOneColor, state.playerOneRainbow, p1Serves);
         applyTileBackground(p2TileBg, state.playerTwoColor, state.playerTwoRainbow, !p1Serves);
@@ -841,6 +900,45 @@ public final class MainActivity extends Activity implements BluetoothWatchClient
         }
         previousP1Points = state.playerOnePoints;
         previousP2Points = state.playerTwoPoints;
+    }
+
+    private void applyServiceBadgeStyle(
+        TextView badgeView,
+        GradientDrawable badgeBg,
+        boolean isServer,
+        String sideTag,
+        boolean canChooseSide,
+        boolean canSelectServer
+    ) {
+        if (badgeView == null || badgeBg == null) return;
+        badgeBg.setCornerRadius(dp(6));
+        if (isServer) {
+            badgeView.setVisibility(View.VISIBLE);
+            badgeView.setText(sideTag);
+            badgeView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+            if (canChooseSide) {
+                badgeView.setTextColor(Color.WHITE);
+                badgeBg.setColor(BADGE_UNLOCKED_FILL);
+                badgeBg.setStroke(dp(1), BADGE_UNLOCKED_RIM);
+            } else {
+                // Locked during a server streak: small dimmed red background, switching disabled
+                badgeView.setTextColor(BADGE_LOCKED_TEXT);
+                badgeBg.setColor(BADGE_LOCKED_FILL);
+                badgeBg.setStroke(dp(1), BADGE_LOCKED_RIM);
+            }
+        } else if (canSelectServer) {
+            badgeView.setVisibility(View.VISIBLE);
+            badgeView.setText("[SERVE]");
+            badgeView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+            badgeView.setTextColor(0xDDFFFFFF);
+            badgeBg.setColor(BADGE_SERVE_PICK_FILL);
+            badgeBg.setStroke(dp(1), BADGE_SERVE_PICK_RIM);
+        } else {
+            badgeView.setVisibility(View.INVISIBLE);
+            badgeView.setText("");
+            badgeBg.setColor(Color.TRANSPARENT);
+            badgeBg.setStroke(0, Color.TRANSPARENT);
+        }
     }
 
     private void showReactionBadge(int drawableResId) {

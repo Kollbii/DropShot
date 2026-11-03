@@ -36,8 +36,10 @@ public class PlayerComparisonActivity extends Activity {
             return;
         }
         theme = new UiTheme(this);
-        PlayerStatistics.Summary a = PlayerStatistics.calculate(this, one);
-        PlayerStatistics.Summary b = PlayerStatistics.calculate(this, two);
+        java.util.Map<String, PlayerStatistics.Summary> summaries =
+            PlayerStatistics.calculateAll(this, java.util.Arrays.asList(one, two));
+        PlayerStatistics.Summary a = summaries.getOrDefault(one.id, new PlayerStatistics.Summary());
+        PlayerStatistics.Summary b = summaries.getOrDefault(two.id, new PlayerStatistics.Summary());
         int[] h2h = headToHead();
 
         LinearLayout root = box(theme.background);
@@ -67,8 +69,17 @@ public class PlayerComparisonActivity extends Activity {
             "Matches",
             "Wins",
             "Win rate",
+            "Laplace win prob",
+            "Wilson 95% bound",
             "Points",
             "Avg pts/match",
+            "Serve hold rate",
+            "Side-out rate",
+            "Markov serve %",
+            "Right [R] picks",
+            "Right [R] win %",
+            "Left [L] picks",
+            "Left [L] win %",
             "6-7 or 7-6",
             "6-9 or 9-6"
         };
@@ -76,8 +87,17 @@ public class PlayerComparisonActivity extends Activity {
             String.valueOf(a.matches),
             String.valueOf(a.wins),
             pct(a.wins, a.matches) + "%",
+            String.format(Locale.US, "%.1f%%", 100.0 * a.laplaceWinProbability()),
+            String.format(Locale.US, "%.1f%%", 100.0 * a.wilsonLowerBound95()),
             String.valueOf(a.points),
             avg(a.points, a.matches),
+            pct(a.servesWon, a.servesTotal) + "%",
+            pct(a.receivesWon, a.receivesTotal) + "%",
+            String.format(Locale.US, "%.1f%%", 100.0 * a.markovServeShare()),
+            String.valueOf(a.rightPicks),
+            pct(a.rightServesWon, a.rightServesTotal) + "%",
+            String.valueOf(a.leftPicks),
+            pct(a.leftServesWon, a.leftServesTotal) + "%",
             String.valueOf(a.score67),
             String.valueOf(a.score69)
         };
@@ -85,8 +105,17 @@ public class PlayerComparisonActivity extends Activity {
             String.valueOf(b.matches),
             String.valueOf(b.wins),
             pct(b.wins, b.matches) + "%",
+            String.format(Locale.US, "%.1f%%", 100.0 * b.laplaceWinProbability()),
+            String.format(Locale.US, "%.1f%%", 100.0 * b.wilsonLowerBound95()),
             String.valueOf(b.points),
             avg(b.points, b.matches),
+            pct(b.servesWon, b.servesTotal) + "%",
+            pct(b.receivesWon, b.receivesTotal) + "%",
+            String.format(Locale.US, "%.1f%%", 100.0 * b.markovServeShare()),
+            String.valueOf(b.rightPicks),
+            pct(b.rightServesWon, b.rightServesTotal) + "%",
+            String.valueOf(b.leftPicks),
+            pct(b.leftServesWon, b.leftServesTotal) + "%",
             String.valueOf(b.score67),
             String.valueOf(b.score69)
         };

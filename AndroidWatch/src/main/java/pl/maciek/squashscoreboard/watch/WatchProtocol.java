@@ -21,6 +21,7 @@ public final class WatchProtocol {
     public static final String CMD_RESET = "RESET";
     public static final String CMD_TOGGLE_PAUSE = "TOGGLE_PAUSE";
     public static final String CMD_TOGGLE_SIDE = "TOGGLE_SIDE";
+    public static final String CMD_SWITCH_SERVER = "SWITCH_SERVER";
 
     public static final String MSG_STATE = "STATE";
     public static final String MSG_ACK = "ACK";
@@ -87,6 +88,8 @@ public final class WatchProtocol {
         public final int targetSets;
         public final int activeServer;
         public final String serviceSide;
+        public final boolean canChooseSide;
+        public final boolean canSelectServer;
         public final int playerOneColor;
         public final boolean playerOneRainbow;
         public final int playerTwoColor;
@@ -115,6 +118,50 @@ public final class WatchProtocol {
             boolean matchFinished,
             boolean paused
         ) {
+            this(
+                playerOneInitials,
+                playerTwoInitials,
+                playerOnePoints,
+                playerTwoPoints,
+                playerOneSets,
+                playerTwoSets,
+                targetSets,
+                activeServer,
+                serviceSide,
+                !matchFinished,
+                playerOnePoints == 0 && playerTwoPoints == 0 && playerOneSets == 0 && playerTwoSets == 0 && !matchFinished,
+                playerOneColor,
+                playerOneRainbow,
+                playerTwoColor,
+                playerTwoRainbow,
+                actionLabel,
+                gameOrMatchBall,
+                matchFinished,
+                paused
+            );
+        }
+
+        public WatchState(
+            String playerOneInitials,
+            String playerTwoInitials,
+            int playerOnePoints,
+            int playerTwoPoints,
+            int playerOneSets,
+            int playerTwoSets,
+            int targetSets,
+            int activeServer,
+            String serviceSide,
+            boolean canChooseSide,
+            boolean canSelectServer,
+            int playerOneColor,
+            boolean playerOneRainbow,
+            int playerTwoColor,
+            boolean playerTwoRainbow,
+            String actionLabel,
+            boolean gameOrMatchBall,
+            boolean matchFinished,
+            boolean paused
+        ) {
             this.playerOneInitials = playerOneInitials;
             this.playerTwoInitials = playerTwoInitials;
             this.playerOnePoints = playerOnePoints;
@@ -124,6 +171,8 @@ public final class WatchProtocol {
             this.targetSets = targetSets;
             this.activeServer = activeServer;
             this.serviceSide = serviceSide;
+            this.canChooseSide = canChooseSide;
+            this.canSelectServer = canSelectServer;
             this.playerOneColor = playerOneColor;
             this.playerOneRainbow = playerOneRainbow;
             this.playerTwoColor = playerTwoColor;
@@ -145,6 +194,8 @@ public final class WatchProtocol {
                 2,
                 1,
                 "R",
+                true,
+                true,
                 DEFAULT_P1_COLOR,
                 false,
                 DEFAULT_P2_COLOR,
@@ -175,7 +226,8 @@ public final class WatchProtocol {
             || CMD_UNDO.equals(command)
             || CMD_RESET.equals(command)
             || CMD_TOGGLE_PAUSE.equals(command)
-            || CMD_TOGGLE_SIDE.equals(command);
+            || CMD_TOGGLE_SIDE.equals(command)
+            || CMD_SWITCH_SERVER.equals(command);
     }
 
     public static String encodeCommandLine(String command) {
@@ -228,6 +280,9 @@ public final class WatchProtocol {
         boolean ball = extractBooleanField(line, "ball", false);
         boolean fin = extractBooleanField(line, "fin", false);
         boolean paused = extractBooleanField(line, "paused", false);
+        boolean defaultCanPickSrv = p1 == 0 && p2 == 0 && s1 == 0 && s2 == 0 && !fin;
+        boolean canPickSide = extractBooleanField(line, "canPickSide", !fin);
+        boolean canPickSrv = extractBooleanField(line, "canPickSrv", defaultCanPickSrv);
 
         return new WatchState(
             n1.isEmpty() ? "P1" : n1,
@@ -239,6 +294,8 @@ public final class WatchProtocol {
             targetSets,
             srv,
             side,
+            canPickSide,
+            canPickSrv,
             c1,
             r1,
             c2,

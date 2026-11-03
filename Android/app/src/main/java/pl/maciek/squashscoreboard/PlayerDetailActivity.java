@@ -103,8 +103,36 @@ public class PlayerDetailActivity extends Activity {
                 : "Cloud sync: Local only (tap Link cloud to enable Supabase sync)"
         );
         addStatCard(content, "Matches: " + s.matches + "   ·   Wins: " + s.wins + " (Win rate: " + pct(s.wins, s.matches) + "%)");
+        addStatCard(
+            content,
+            String.format(
+                Locale.US,
+                "Bayesian win prob (Laplace): %.1f%%   ·   Wilson 95%% lower bound: %.1f%%",
+                100.0 * s.laplaceWinProbability(),
+                100.0 * s.wilsonLowerBound95()
+            )
+        );
         addStatCard(content, "Points won: " + s.points + "   ·   Average points per match: " + avg(s.points, s.matches));
         addStatCard(content, "Average points per game: " + avg(s.points, s.totalSets) + "   ·   Average games won per match: " + avg(s.wonSets, s.matches));
+        addStatCard(
+            content,
+            "Serve hold rate: " + pct(s.servesWon, s.servesTotal) + "% (" + s.servesWon + "/" + s.servesTotal + ")"
+                + "   ·   Side-out rate: " + pct(s.receivesWon, s.receivesTotal) + "% (" + s.receivesWon + "/" + s.receivesTotal + ")"
+        );
+        addStatCard(
+            content,
+            String.format(
+                Locale.US,
+                "Markov steady-state serve share: %.1f%%   ·   Expected rally win rate: %.1f%%",
+                100.0 * s.markovServeShare(),
+                100.0 * s.expectedRallyWinRate()
+            )
+        );
+        addStatCard(
+            content,
+            "Right [R] picks: " + s.rightPicks + " (Win: " + pct(s.rightServesWon, s.rightServesTotal) + "%)"
+                + "   ·   Left [L] picks: " + s.leftPicks + " (Win: " + pct(s.leftServesWon, s.leftServesTotal) + "%)"
+        );
         addStatCard(content, "Points to 6-7 or 7-6: " + s.score67 + "   ·   Points to 6-9 or 9-6: " + s.score69);
 
         scroll.addView(content);
