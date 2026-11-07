@@ -41,8 +41,15 @@ DropShot/
 │   ├── ste-writing.md         ← ASD-STE100 rules for all text
 │   ├── ui-ux.md               ← Material Design 3, WCAG 2.2 AA, UI text
 │   └── watch-ecosystem.md     ← Zepp OS and AndroidWatch companions, protocol
-├── .agents/                   ← Antigravity workspace agents and skills
-│   ├── agents/release-manager.md ← Gemini Flash release automation agent (merge, tag, build, release, cleanup)
+├── .agents/                   ← Antigravity / Codex / Claude workspace agents and skills
+│   ├── agents/                ← module-scoped agents for token optimization (see .agents/agents/README.md)
+│   │   ├── README.md          ← cross-platform routing & token guide (Gemini, OpenAI, Claude)
+│   │   ├── android-app.md     ← Android/app scoreboard, stats, stores, and M3 UI agent
+│   │   ├── lootbox-cosmetics.md ← Android/lootbox colors, bundled fonts, and AES-GCM agent
+│   │   ├── supabase-cloud.md  ← supabase/ SQL schema, RLS, and SupabaseSyncClient agent
+│   │   ├── watch-companion.md ← AndroidWatch RFCOMM and ZeppOS watch remote agent
+│   │   ├── docs-and-ste-auditor.md ← ASD-STE100 documentation & compliance auditor agent
+│   │   └── release-manager.md ← Gemini Flash release automation agent (merge, tag, build, release, cleanup)
 │   └── skills/                ← step-by-step procedures for agents
 ├── Android/
 │   ├── AGENTS.md              ← Android rules
@@ -63,6 +70,24 @@ DropShot/
 │   └── src/                   ← standalone Wear OS / LG G Watch app and unit tests
 └── ZeppOS/                    ← Amazfit watch apps (has its own AGENTS.md)
 ```
+
+### 2.1 Module-scoped agents & token optimization (Gemini, OpenAI, Claude)
+
+Use the specialized agents in [`.agents/agents/`](.agents/agents/README.md) to isolate context windows and minimize token usage:
+
+| Agent | Scope | Gemini | OpenAI | Claude |
+|---|---|---|---|---|
+| [`android-app`](.agents/agents/android-app.md) | `Android/app/` (Scoreboard, stats, stores, UI) | `flash` *(or `pro`)* | `gpt-5-mini` (`medium`) | `claude-sonnet-4-5` (`medium`) |
+| [`lootbox-cosmetics`](.agents/agents/lootbox-cosmetics.md) | `Android/lootbox/`, fonts, `PlayerCustomizationActivity` | `flash` (`low`) | `gpt-5-mini` (`low`) | `claude-haiku-4-5` (`low`) |
+| [`supabase-cloud`](.agents/agents/supabase-cloud.md) | `supabase/`, `SupabaseSyncClient`, `CloudConfigStore` | `flash` (`medium`) | `gpt-5-mini` (`medium`) | `claude-haiku-4-5` (`medium`) |
+| [`watch-companion`](.agents/agents/watch-companion.md) | `AndroidWatch/`, `ZeppOS/`, watch bridges | `flash` (`low`) | `gpt-5-mini` (`low`) | `claude-haiku-4-5` (`low`) |
+| [`docs-and-ste-auditor`](.agents/agents/docs-and-ste-auditor.md) | `README.md`, `AGENTS.md`, `docs/agents/` | `flash` / `flash_lite` | `gpt-5-mini` (`low`) | `claude-haiku-4-5` (`low`) |
+| [`release-manager`](.agents/agents/release-manager.md) | Version bump, APK builds, merge, tag, release, cleanup | `flash` (`low`) | `gpt-5-mini` (`low`) | `claude-haiku-4-5` (`low`) |
+
+Token-saving rules for all agents:
+1. Read only the `AGENTS.md` and source files inside your target module. Do not read unrelated modules.
+2. Do not read `MainActivity.java` (1,330+ lines) in full. Locate methods with `grep -n` and read 80–120 lines (`StartLine`/`EndLine`).
+3. Run module-scoped Gradle unit test tasks (`:app:testDebugUnitTest`, `:lootbox:testDebugUnitTest`, or `-p AndroidWatch testDebugUnitTest`) during iteration.
 
 ## 3. Commands
 
@@ -185,15 +210,15 @@ These behaviors keep the score correct. Do not change them without an explicit r
    - Phone app (`Android/app/build.gradle`): `versionCode` increases by `1`, `versionName` increases by `0.1` (example: `'1.7'` → `'1.8'`).
    - Android Watch app (`AndroidWatch/build.gradle`): increase `versionCode` by `1` and `versionName` by `0.1` when watch code changes.
    - Zepp OS apps (`ZeppOS/app.json`, `ZeppOS/workout-extension/app.json`): change only for Zepp OS changes.
-7. **Release tag format**: Use annotated tags in the format `git tag -a 0.1.8 -m "Release 0.1.8"`.
+7. **Release tag format**: Use annotated tags in the format `git tag -a n.n.n -m "Release n.n.n"`.
 8. **Final release procedure** (run only when the user requests a release and no more code will be added; delegate to [`.agents/agents/release-manager.md`](.agents/agents/release-manager.md) with `Model: "flash"` to save tokens):
    1. Update `versionCode` and `versionName` in `Android/app/build.gradle` (and `AndroidWatch/build.gradle` if changed).
    2. Verify that `README.md`, `AGENTS.md`, and `docs/agents/` reflect all changes in the release.
    3. Build and test both modules:
       - `gradle -p Android -Dorg.gradle.java.home=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home testDebugUnitTest assembleDebug`
       - `gradle -p AndroidWatch -Dorg.gradle.java.home=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home testDebugUnitTest assembleDebug`
-   4. Commit the changes on `release/n.n.n/feature-name` (without `*.apk`) and merge the branch into `master`.
-   5. Tag the release commit on `master`: `git tag -a n.n.n -m "Release n.n.n"`.
+   4. Commit the changes on `release/n.n.n/feature-name` (without `*.apk`) and merge the branch into `master`. (If changes are added directly on `master`, amend the merge commit with `git commit --amend`).
+   5. Tag the release commit on `master`: `git tag -a n.n.n -m "Release n.n.n"`. Never merge a release without creating and pushing this tag.
    6. Push `master` and the tag to `origin`, and delete the merged `release/n.n.n/*` branch locally and on `origin`.
    7. Publish the GitHub Release with title `n.n.n` and attach `DropShot-n.n.n.apk` (from `Android/app/build/outputs/apk/debug/app-debug.apk`) and `DropShot-Watch-n.n.n.apk` (from `AndroidWatch/build/outputs/apk/debug/AndroidWatch-debug.apk`).
 

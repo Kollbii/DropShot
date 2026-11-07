@@ -28,17 +28,19 @@ description: Bump the DropShot version, verify documentation, build phone and wa
 4. **Commit on the feature branch and merge into `master`**:
    - Stage all modified source and documentation files and exclude `*.apk`.
    - Commit the changes on `release/n.n.n/feature-name` and merge the branch into `master`.
-5. **Create the annotated Git tag**:
+5. **Create the annotated Git tag on the merge commit**:
+   - If changes (such as version bump or documentation) are added on the merge commit, stage them and run `git commit --amend`.
+   - Create the annotated Git tag:
    ```bash
-   git tag -a 0.1.8 -m "Release 0.1.8"
+   git tag -a <n.n.n> -m "Release <n.n.n>"
    ```
 6. **Push `master` and the tag to `origin`, and clean up the release branch**:
    ```bash
    git push origin master
-   git push origin 0.1.8
-   git branch -d release/0.1.8/feature-name
-   git push origin --delete release/0.1.8/feature-name
+   git push origin <n.n.n>
+   git branch -d release/<n.n.n>/feature-name
+   git push origin --delete release/<n.n.n>/feature-name
    ```
 7. **Publish the GitHub Release with the APK assets**:
-   - Create or update the GitHub Release for tag `0.1.8` with title `0.1.8`.
-   - Upload `Android/app/build/outputs/apk/debug/app-debug.apk` as `DropShot-0.1.8.apk` and `AndroidWatch/build/outputs/apk/debug/AndroidWatch-debug.apk` as `DropShot-Watch-0.1.8.apk` using `gh release upload`.
+   - Create or update the GitHub Release for tag `<n.n.n>` with title `<n.n.n>`.
+   - Upload `Android/app/build/outputs/apk/debug/app-debug.apk` as `DropShot-<n.n.n>.apk` and `AndroidWatch/build/outputs/apk/debug/AndroidWatch-debug.apk` as `DropShot-Watch-<n.n.n>.apk` using `gh release upload`.
