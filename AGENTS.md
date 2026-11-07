@@ -41,7 +41,9 @@ DropShot/
 │   ├── ste-writing.md         ← ASD-STE100 rules for all text
 │   ├── ui-ux.md               ← Material Design 3, WCAG 2.2 AA, UI text
 │   └── watch-ecosystem.md     ← Zepp OS and AndroidWatch companions, protocol
-├── .agents/skills/            ← step-by-step procedures for agents
+├── .agents/                   ← Antigravity workspace agents and skills
+│   ├── agents/release-manager.md ← Gemini Flash release automation agent (merge, tag, build, release, cleanup)
+│   └── skills/                ← step-by-step procedures for agents
 ├── Android/
 │   ├── AGENTS.md              ← Android rules
 │   ├── README.md              ← Android module guide
@@ -184,7 +186,7 @@ These behaviors keep the score correct. Do not change them without an explicit r
    - Android Watch app (`AndroidWatch/build.gradle`): increase `versionCode` by `1` and `versionName` by `0.1` when watch code changes.
    - Zepp OS apps (`ZeppOS/app.json`, `ZeppOS/workout-extension/app.json`): change only for Zepp OS changes.
 7. **Release tag format**: Use annotated tags in the format `git tag -a 0.1.8 -m "Release 0.1.8"`.
-8. **Final release procedure** (run only when the user requests a release and no more code will be added):
+8. **Final release procedure** (run only when the user requests a release and no more code will be added; delegate to [`.agents/agents/release-manager.md`](.agents/agents/release-manager.md) with `Model: "flash"` to save tokens):
    1. Update `versionCode` and `versionName` in `Android/app/build.gradle` (and `AndroidWatch/build.gradle` if changed).
    2. Verify that `README.md`, `AGENTS.md`, and `docs/agents/` reflect all changes in the release.
    3. Build and test both modules:

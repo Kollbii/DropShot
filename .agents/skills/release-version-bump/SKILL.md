@@ -5,6 +5,9 @@ description: Bump the DropShot version, verify documentation, build phone and wa
 
 # Release and Version Bump Procedure
 
+> [!TIP]
+> **Token Optimization**: Delegate this release workflow to the lightweight Flash custom agent [`.agents/agents/release-manager.md`](../../agents/release-manager.md) via `invoke_subagent` (`TypeName: "release-manager"`, `Model: "flash"`) or select `release-manager` directly in Antigravity so high-tier reasoning tokens are not spent on mechanical build, merge, tag, and release commands.
+
 > [!IMPORTANT]
 > Run this procedure only when the feature is complete on a `release/n.n.n/feature-name` branch, user approval is granted, and no new code will be added to the release.
 
