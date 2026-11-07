@@ -15,9 +15,12 @@ import java.util.Locale;
 public final class ScoreChartView extends View {
     private final MatchRecord record;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path firstPath = new Path();
+    private final Path secondPath = new Path();
     private final DashPathEffect dashEffect;
     private final UiTheme theme;
     private final ScaleGestureDetector scaleDetector;
+    private final long cachedAxisDuration;
     private boolean interactive, dragged;
     private double zoom = 1, windowStart;
     private float lastX, downX;
@@ -28,6 +31,9 @@ public final class ScoreChartView extends View {
         this.record = record;
         this.theme = new UiTheme(context);
         this.dashEffect = new DashPathEffect(new float[]{dp(10), dp(6)}, 0);
+        long last = 0;
+        for (long t : record.pointTimesMs) last = Math.max(last, t);
+        this.cachedAxisDuration = Math.max(1, Math.max(record.durationMs, last));
         setContentDescription("Point timeline chart for " + record.playerOneName + " versus " + record.playerTwoName + ".");
         scaleDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override public boolean onScale(ScaleGestureDetector detector) {
@@ -96,9 +102,10 @@ public final class ScoreChartView extends View {
         int c1 = theme.playerAccentOnSurface(record.playerOneColor);
         int c2 = theme.playerAccentOnSurface(record.playerTwoColor);
 
-        Path first = new Path(), second = new Path();
-        first.moveTo(left, y(startOne, yMin, yMax, top, bottom));
-        second.moveTo(left, y(startTwo, yMin, yMax, top, bottom));
+        firstPath.reset();
+        secondPath.reset();
+        firstPath.moveTo(left, y(startOne, yMin, yMax, top, bottom));
+        secondPath.moveTo(left, y(startTwo, yMin, yMax, top, bottom));
         one = startOne;
         two = startTwo;
         for (int i = 0; i < winners.size(); i++) {
@@ -108,8 +115,8 @@ public final class ScoreChartView extends View {
             float x = x(time, left, right, windowStart, window);
             float y1 = y(one, yMin, yMax, top, bottom);
             float y2 = y(two, yMin, yMax, top, bottom);
-            first.lineTo(x, y1);
-            second.lineTo(x, y2);
+            firstPath.lineTo(x, y1);
+            secondPath.lineTo(x, y2);
             if (zoom > 1.5 || winners.size() < 40) {
                 paint.setStyle(Paint.Style.FILL);
                 paint.setPathEffect(null);
@@ -127,11 +134,11 @@ public final class ScoreChartView extends View {
         paint.setStrokeWidth(dp(3));
         paint.setPathEffect(null);
         paint.setColor(c1);
-        c.drawPath(first, paint);
+        c.drawPath(firstPath, paint);
 
         paint.setPathEffect(dashEffect);
         paint.setColor(c2);
-        c.drawPath(second, paint);
+        c.drawPath(secondPath, paint);
         paint.setPathEffect(null);
 
         paint.setStyle(Paint.Style.FILL);
@@ -186,11 +193,13 @@ public final class ScoreChartView extends View {
         paint.setStyle(Paint.Style.STROKE);
         c.drawLine(xx, top, xx, bottom, paint);
         paint.setStyle(Paint.Style.FILL);
-        paint.setTextSize(dp(13));
+        paint.setTextSize(dp(12));
         paint.setTextAlign(Paint.Align.CENTER);
         MatchRecord.PointScore score = record.scoreAtPoint(selected);
-        String label = "GAME " + score.setNumber + "  " + score.pointsOne + ":" + score.pointsTwo
-            + "  ·  GAMES " + score.setsOne + ":" + score.setsTwo + "  ·  " + formatPrecise(time);
+        String srvName = score.server == 2 ? record.playerTwoName : record.playerOneName;
+        String label = "G" + score.setNumber + " " + score.pointsOne + ":" + score.pointsTwo
+            + " · SRV: " + srvName + " [" + score.serviceSide + "] (" + (score.sidePicked ? "PICK" : "ALT") + ") · "
+            + formatPrecise(time);
         c.drawText(label, (left + right) / 2, top - dp(9), paint);
     }
 
@@ -209,9 +218,7 @@ public final class ScoreChartView extends View {
     }
 
     private long axisDuration() {
-        long last = 0;
-        for (long t : record.pointTimesMs) last = Math.max(last, t);
-        return Math.max(1, Math.max(record.durationMs, last));
+        return cachedAxisDuration;
     }
 
     private boolean hasRecordedTimes() {
@@ -273,17 +280,26 @@ public final class ScoreChartView extends View {
     }
 
     private void selectNearest(float touchX) {
-        if (record.pointWinners.isEmpty()) return;
-        double wanted = windowStart + (touchX - dp(50)) / Math.max(1f, getWidth() - dp(68)) * axisDuration() / zoom;
+        int n = record.pointWinners.size();
+        if (n == 0) return;
         long duration = axisDuration();
-        double best = Double.MAX_VALUE;
-        for (int i = 0; i < record.pointWinners.size(); i++) {
-            double difference = Math.abs(pointTime(i, duration) - wanted);
-            if (difference < best) {
-                best = difference;
-                selected = i;
+        double wanted = windowStart + (touchX - dp(50)) / Math.max(1f, getWidth() - dp(68)) * duration / zoom;
+        int lo = 0, hi = n - 1;
+        while (lo < hi) {
+            int mid = (lo + hi) >>> 1;
+            if (pointTime(mid, duration) < wanted) {
+                lo = mid + 1;
+            } else {
+                hi = mid;
             }
         }
+        int bestIndex = lo;
+        if (lo > 0) {
+            double diffPrev = Math.abs(pointTime(lo - 1, duration) - wanted);
+            double diffCurr = Math.abs(pointTime(lo, duration) - wanted);
+            if (diffPrev <= diffCurr) bestIndex = lo - 1;
+        }
+        selected = bestIndex;
         invalidate();
     }
 

@@ -1,6 +1,6 @@
 # Reward catalog
 
-The single source of truth is [`RewardCatalog.java`](src/main/java/pl/maciek/squashscoreboard/lootbox/RewardCatalog.java), in the `ENTRIES` array. Each reward has a stable ID, display name, tier and kind. Color rewards contain one or more ARGB colors; font rewards name a bundled `.ttf` file. The animated rainbow uses `animated: true` in its constructor.
+The single source of truth is [`RewardCatalog.java`](src/main/java/pl/maciek/squashscoreboard/lootbox/RewardCatalog.java) (`ENTRIES` array). Each reward has a stable ID, display name, tier, and kind (`COLOR` or `FONT`). Color rewards hold 1 or more ARGB colors; font rewards reference a bundled `.ttf` file in `Android/app/src/main/assets/fonts/`. The animated rainbow uses `animated: true`.
 
 | Tier | Rewards | Drop chance |
 | --- | ---: | ---: |
@@ -9,14 +9,13 @@ The single source of truth is [`RewardCatalog.java`](src/main/java/pl/maciek/squ
 | Green | 5 selected solid colors + 5 fonts | 25% |
 | Gray | 14 solid colors + 10 fonts | 70% |
 
-To add a color, add a `solid(...)` or `gradient(...)` entry with a unique ID and unique first color (the first color is the key stored in profiles and match history). To add a font, add a `font(...)` entry with a unique ID and a corresponding file in `app/src/main/assets/fonts/`. To change its tier, edit its `LootTier` value. To remove a reward, delete its entry. Keep IDs and first colors stable for rewards already distributed; changing either breaks existing unlocks or saved player colors. The four starter colors (`blue`, `red`, `green`, `gold`) and built-in default font are always available.
+To add a color, add a `solid(...)` or `gradient(...)` entry with a unique ID and unique first color (the first color is the key stored in profiles and match history). To add a font, add a `font(...)` entry with a unique ID and a matching `.ttf` file in `app/src/main/assets/fonts/`. To change a tier, edit its `LootTier` value. Keep IDs and first colors stable for rewards already distributed. The 4 starter colors (`blue`, `red`, `green`, `gold`) and the built-in default font (`font-default`) are always available.
 
-Lootbox tier probabilities live in [`LootTier.java`](src/main/java/pl/maciek/squashscoreboard/lootbox/LootTier.java). After a tier is drawn, one color or font in that tier is picked uniformly from the same pool. Unlocks are stored by reward ID and player profile ID in `RewardInventory`. Each reward is available only to the player who received it; the `deweloper` profile can use every reward. Repeated drops remain in the pool and are labeled as already owned.
+Lootbox tier probabilities live in [`LootTier.java`](src/main/java/pl/maciek/squashscoreboard/lootbox/LootTier.java). After a tier is rolled, 1 color or font in that tier is selected uniformly from the precomputed tier pool. Unlocks are stored per player profile ID in encrypted `RewardInventory` storage (`available` returns owned colors; `availableAll` returns owned colors and fonts for Supabase cloud sync). Developer bypasses are permanently disabled (`RewardInventory.isDeveloper` always returns `false`). Repeated drops stay in the pool and show as already owned.
 
 ## Bundled fonts
 
-Gray: Rajdhani, Oxanium, Chakra Petch, Teko, Barlow Condensed, Exo 2, Russo One, Audiowide, Righteous, Space Grotesk.
+- **Gray**: Rajdhani, Oxanium, Chakra Petch, Teko, Barlow Condensed, Exo 2, Russo One, Audiowide, Righteous, Space Grotesk.
+- **Green**: Cinzel Decorative, Pirata One, New Rocker, Black Ops One, Eagle Lake.
 
-Green: Cinzel Decorative, Pirata One, New Rocker, Black Ops One, Eagle Lake.
-
-Font binaries came from the [official Google Fonts repository](https://github.com/google/fonts), under each family's `ofl/` directory. Family-specific SIL Open Font License texts are copied to `Android/font-licenses/`. Every bundled font was checked for the Polish sample `Zażółć gęślą jaźń Łukasz`.
+Font binaries come from the [Google Fonts repository](https://github.com/google/fonts) (`ofl/` directory). Family-specific SIL Open Font License texts are stored in `Android/font-licenses/`. Every bundled font supports the Polish sample `Zażółć gęślą jaźń Łukasz`.

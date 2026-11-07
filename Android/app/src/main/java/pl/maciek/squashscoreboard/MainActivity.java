@@ -45,22 +45,28 @@ import java.util.List;
 import java.util.Locale;
 import pl.maciek.squashscoreboard.lootbox.RewardCatalog;
 import pl.maciek.squashscoreboard.lootbox.RewardFonts;
+import pl.maciek.squashscoreboard.lootbox.RewardInventory;
 
 public class MainActivity extends Activity {
     private UiTheme theme;
     private int background, surface, foreground, muted, playerOneColor, playerTwoColor, remoteOne, remoteTwo, remoteUndo, remoteReset;
-    private boolean darkTheme, highContrast, paused;
+    private boolean darkTheme, highContrast, showServeSideIndicator = true, paused, awaitingNextGame;
     private final MatchState match = new MatchState();
     private String playerOneName = "PLAYER 1", playerTwoName = "PLAYER 2", playerOneProfileId, playerTwoProfileId;
     private long currentMatchId, matchElapsedMs, currentSetElapsedMs, lastClockMs;
     private final ArrayList<Long> setDurationsMs = new ArrayList<>();
     private final ArrayList<Long> pointTimesMs = new ArrayList<>();
     private TextView playerOnePoints, playerTwoPoints, playerOneSets, playerTwoSets, status, playerOneTitle, playerTwoTitle;
+    private TextView playerOneServeBadge, playerTwoServeBadge;
+    private FrameLayout playerOneServeContainer, playerTwoServeContainer;
+    private GradientDrawable playerOneServeBadgeBg, playerTwoServeBadgeBg;
     private LinearLayout playerOnePanelView, playerTwoPanelView;
     private Button pauseButton, undoButton;
     private TextView pauseOverlay;
     private MediaSession mediaSession;
     private WatchCommandServer watchCommandServer;
+    private BluetoothWatchServer bluetoothWatchServer;
+    private boolean requestedBluetoothPermission;
     private GradientDrawable playerOneBackground, playerTwoBackground;
     private MatchFinishedView finishedOverlay;
     private FireworksView fireworksView;
@@ -68,7 +74,8 @@ public class MainActivity extends Activity {
     private Button courtButton;
     private GradientDrawable courtBackground;
     private CourtAlertView courtAlertView;
-    private UiTheme.CollapsibleBottomNav bottomNav;
+    private View bottomNav;
+    private boolean bottomNavVisible = true;
     private long courtStartMs;
     private final Handler clockHandler = new Handler(Looper.getMainLooper());
     private final Runnable clockTicker = new Runnable() {
@@ -82,6 +89,9 @@ public class MainActivity extends Activity {
     @Override
     public void onCreate(Bundle state) {
         super.onCreate(state);
+        RewardInventory.setOnUnlockListener((ctx, profileId, reward) ->
+            SupabaseSyncClient.syncProfileByIdInBackground(ctx, profileId)
+        );
         loadStyle();
         match.configure(AppPreferences.pointsPerSet(this), AppPreferences.setsPerMatch(this));
         courtStartMs = AppPreferences.courtStart(this);
@@ -93,11 +103,28 @@ public class MainActivity extends Activity {
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
         );
         setContentView(createContent());
-        currentMatchId = System.currentTimeMillis();
+        currentMatchId = InputValidator.generateSecureMatchId();
         startClock();
         restoreMatchFromIntent(getIntent());
         createMediaSession();
-        watchCommandServer = new WatchCommandServer(new Handler(Looper.getMainLooper()), this::handleWatchCommand);
+        Handler mainLoopHandler = new Handler(Looper.getMainLooper());
+        watchCommandServer = new WatchCommandServer(mainLoopHandler, this::handleWatchCommand);
+        bluetoothWatchServer = new BluetoothWatchServer(
+            this,
+            mainLoopHandler,
+            this::handleWatchCommand,
+            new BluetoothWatchServer.StateProvider() {
+                @Override
+                public String buildStateJsonLine() {
+                    return buildWatchStateLine();
+                }
+
+                @Override
+                public boolean isGameOrMatchBall() {
+                    return match.isGameOrMatchBall();
+                }
+            }
+        );
         refreshScreen();
         if (getIntent() != null && getIntent().getBooleanExtra(UiTheme.EXTRA_OPEN_SETTINGS, false)) {
             getIntent().removeExtra(UiTheme.EXTRA_OPEN_SETTINGS);
@@ -133,15 +160,49 @@ public class MainActivity extends Activity {
         super.onResume();
         if (mediaSession != null) mediaSession.setActive(true);
         if (watchCommandServer != null) watchCommandServer.start();
+        if (Build.VERSION.SDK_INT >= 31
+            && !BluetoothWatchServer.hasBluetoothConnectPermission(this)
+            && !requestedBluetoothPermission) {
+            requestedBluetoothPermission = true;
+            requestPermissions(new String[]{android.Manifest.permission.BLUETOOTH_CONNECT}, 1001);
+        } else if (bluetoothWatchServer != null) {
+            bluetoothWatchServer.start();
+        }
         clockHandler.removeCallbacks(clockTicker);
         clockHandler.post(clockTicker);
+        loadStyle();
         syncSelectedProfiles();
+        int targetPts = AppPreferences.pointsPerSet(this);
+        int targetSets = AppPreferences.setsPerMatch(this);
+        if (targetPts != match.getPointsToWinSet() || targetSets != match.getSetsToWinMatch()) {
+            archiveCurrentMatch();
+            match.configure(targetPts, targetSets);
+            resetClock();
+            currentMatchId = InputValidator.generateSecureMatchId();
+            setContentView(createContent());
+        }
         refreshScreen();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 1001 && bluetoothWatchServer != null) {
+            bluetoothWatchServer.start();
+        }
     }
 
     private void syncSelectedProfiles() {
         PlayerProfile one = ProfileStore.find(this, playerOneProfileId);
         PlayerProfile two = ProfileStore.find(this, playerTwoProfileId);
+        if (one == null && playerOneName != null) {
+            one = ProfileStore.findByName(this, playerOneName);
+            if (one != null) playerOneProfileId = one.id;
+        }
+        if (two == null && playerTwoName != null) {
+            two = ProfileStore.findByName(this, playerTwoName);
+            if (two != null) playerTwoProfileId = two.id;
+        }
         boolean changed = false;
         if (one != null && (!one.name.equals(playerOneName) || one.color != playerOneColor)) {
             playerOneName = one.name;
@@ -169,6 +230,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         if (watchCommandServer != null) watchCommandServer.stop();
+        if (bluetoothWatchServer != null) bluetoothWatchServer.stop();
         pauseMatch();
         hideFireworks();
         stopBallPulse(1);
@@ -187,13 +249,14 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         clockHandler.removeCallbacks(clockTicker);
         if (watchCommandServer != null) watchCommandServer.stop();
+        if (bluetoothWatchServer != null) bluetoothWatchServer.stop();
         if (mediaSession != null) mediaSession.release();
+        if (bottomNav != null) bottomNav.animate().cancel();
         super.onDestroy();
     }
 
     @Override public void onUserInteraction() {
         super.onUserInteraction();
-        if (bottomNav != null) bottomNav.onUserInteraction();
     }
 
     private View createContent() {
@@ -283,7 +346,7 @@ public class MainActivity extends Activity {
         screen.addView(root, new FrameLayout.LayoutParams(-1, -1));
         courtAlertView = new CourtAlertView(this);
         screen.addView(courtAlertView, new FrameLayout.LayoutParams(-1, -1));
-        bottomNav = theme.createCollapsibleBottomNav(this, UiTheme.TAB_MATCH, this::showSettings);
+        bottomNav = theme.createBottomNavBar(this, UiTheme.TAB_MATCH, this::showSettings);
         screen.addView(bottomNav, new FrameLayout.LayoutParams(-1, dp(56), Gravity.BOTTOM));
         return screen;
     }
@@ -332,6 +395,43 @@ public class MainActivity extends Activity {
         points.setGravity(Gravity.CENTER);
         UiTheme.applyTabularNumbers(points);
 
+        FrameLayout serveContainer = new FrameLayout(this);
+        serveContainer.setMinimumHeight(dp(48));
+        serveContainer.setFilterTouchesWhenObscured(true);
+
+        GradientDrawable serveBadgeBg = new GradientDrawable();
+        serveBadgeBg.setCornerRadius(dp(8));
+        serveBadgeBg.setColor(0x2EFFFFFF);
+        serveBadgeBg.setStroke(dp(1), 0x88FFFFFF);
+
+        TextView serveBadge = text("[R]", 18, Color.WHITE);
+        serveBadge.setTypeface(Typeface.DEFAULT_BOLD);
+        serveBadge.setGravity(Gravity.CENTER);
+        serveBadge.setSingleLine(true);
+        serveBadge.setPadding(dp(14), dp(4), dp(14), dp(4));
+        serveBadge.setBackground(serveBadgeBg);
+
+        FrameLayout.LayoutParams badgeParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        );
+        serveContainer.addView(serveBadge, badgeParams);
+        serveContainer.setOnClickListener(v -> {
+            if (match.isMatchFinished()) return;
+            if (match.getActiveServer() == player) {
+                if (match.canChooseServiceSide() && match.toggleServiceSide()) {
+                    refreshScreen();
+                }
+            } else if (match.canSelectInitialServer()) {
+                if (match.selectInitialServer(player)) {
+                    refreshScreen();
+                }
+            } else {
+                addPoint(player);
+            }
+        });
+
         TextView hint = text("TAP PANEL TO ADD 1 POINT", 16, 0xFFF4F0E9);
         hint.setGravity(Gravity.CENTER);
         hint.setSingleLine(true);
@@ -339,7 +439,8 @@ public class MainActivity extends Activity {
         panel.addView(title, new LinearLayout.LayoutParams(-1, dp(36)));
         panel.addView(sets, new LinearLayout.LayoutParams(-1, dp(38)));
         panel.addView(points, new LinearLayout.LayoutParams(-1, 0, 1));
-        panel.addView(hint, new LinearLayout.LayoutParams(-1, dp(26)));
+        panel.addView(serveContainer, new LinearLayout.LayoutParams(-1, dp(48)));
+        panel.addView(hint, new LinearLayout.LayoutParams(-1, dp(24)));
 
         if (player == 1) {
             playerOnePoints = points;
@@ -347,12 +448,18 @@ public class MainActivity extends Activity {
             playerOneTitle = title;
             playerOneBackground = bg;
             playerOnePanelView = panel;
+            playerOneServeContainer = serveContainer;
+            playerOneServeBadge = serveBadge;
+            playerOneServeBadgeBg = serveBadgeBg;
         } else {
             playerTwoPoints = points;
             playerTwoSets = sets;
             playerTwoTitle = title;
             playerTwoBackground = bg;
             playerTwoPanelView = panel;
+            playerTwoServeContainer = serveContainer;
+            playerTwoServeBadge = serveBadge;
+            playerTwoServeBadgeBg = serveBadgeBg;
         }
         return panel;
     }
@@ -362,355 +469,15 @@ public class MainActivity extends Activity {
     }
 
     private void showSettings(int initialTab) {
-        LinearLayout playersForm = settingsPage();
-        LinearLayout appearanceForm = settingsPage();
-        LinearLayout remoteForm = settingsPage();
-        LinearLayout courtForm = settingsPage();
-
-        TextView note = text("A change to the players or the rules starts a new match. Remote and theme settings apply immediately.", 16, muted);
-        note.setPadding(0, 0, 0, dp(8));
-        playersForm.addView(note);
-
-        List<PlayerProfile> profiles = ProfileStore.load(this);
-        String[] choices = new String[profiles.size() + 1];
-        choices[0] = "Guest";
-        for (int i = 0; i < profiles.size(); i++) {
-            choices[i + 1] = profiles.get(i).name + " (" + UiTheme.playerColorName(profiles.get(i).color) + ")";
-        }
-
-        Spinner profileOne = spinner(choices, profileIndex(profiles, playerOneProfileId));
-        Spinner profileTwo = spinner(choices, profileIndex(profiles, playerTwoProfileId));
-        EditText nameOne = field(playerOneName, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        EditText nameTwo = field(playerTwoName, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        EditText points = field(String.valueOf(match.getPointsToWinSet()), InputType.TYPE_CLASS_NUMBER);
-        EditText sets = field(String.valueOf(match.getSetsToWinMatch()), InputType.TYPE_CLASS_NUMBER);
-        Spinner colorOne = spinner(colorNames(), colorIndex(playerOneColor));
-        Spinner colorTwo = spinner(colorNames(), colorIndex(playerTwoColor));
-
-        LinearLayout nameOneRow = settingRow("Name of Player 1", nameOne);
-        LinearLayout colorOneRow = settingRow("Color for Player 1", colorOne);
-        LinearLayout nameTwoRow = settingRow("Name of Player 2", nameTwo);
-        LinearLayout colorTwoRow = settingRow("Color for Player 2", colorTwo);
-
-        addSetting(playersForm, "Profile for Player 1", profileOne);
-        playersForm.addView(nameOneRow);
-        playersForm.addView(colorOneRow);
-        addSetting(playersForm, "Profile for Player 2", profileTwo);
-        playersForm.addView(nameTwoRow);
-        playersForm.addView(colorTwoRow);
-        profileOne.setOnItemSelectedListener(profileVisibility(profileOne, nameOneRow, colorOneRow));
-        profileTwo.setOnItemSelectedListener(profileVisibility(profileTwo, nameTwoRow, colorTwoRow));
-
-        addSetting(playersForm, "Points to win a game", points);
-        addSetting(playersForm, "Games to win the match", sets);
-
-        CheckBox darkBox = checkBox("Use dark theme", darkTheme);
-        CheckBox hcBox = checkBox("Use high-contrast mode", highContrast);
-        appearanceForm.addView(darkBox);
-        appearanceForm.addView(hcBox);
-
-        Spinner pilotOne = spinner(remoteNames(), remoteIndex(remoteOne));
-        Spinner pilotTwo = spinner(remoteNames(), remoteIndex(remoteTwo));
-        Spinner pilotUndo = spinner(remoteNames(), remoteIndex(remoteUndo));
-        Spinner pilotReset = spinner(remoteNames(), remoteIndex(remoteReset));
-        addSetting(remoteForm, "Remote key for Player 1", pilotOne);
-        addSetting(remoteForm, "Remote key for Player 2", pilotTwo);
-        addSetting(remoteForm, "Remote key for Undo", pilotUndo);
-        addSetting(remoteForm, "Remote key for Reset", pilotReset);
-
-        EditText duration = field(String.valueOf(AppPreferences.courtDuration(this)), InputType.TYPE_CLASS_NUMBER);
-        EditText green = field(String.valueOf(AppPreferences.courtGreen(this)), InputType.TYPE_CLASS_NUMBER);
-        EditText yellow = field(String.valueOf(AppPreferences.courtYellow(this)), InputType.TYPE_CLASS_NUMBER);
-        EditText red = field(String.valueOf(AppPreferences.courtRed(this)), InputType.TYPE_CLASS_NUMBER);
-        addSetting(courtForm, "Rental duration (min)", duration);
-        addSetting(courtForm, "Green warning (min before end)", green);
-        addSetting(courtForm, "Yellow warning (min before end)", yellow);
-        addSetting(courtForm, "Red warning (min before end)", red);
-        CheckBox vibration = checkBox("Vibrate at warnings (1, 2, and 3 pulses)", AppPreferences.courtVibration(this));
-        courtForm.addView(vibration);
-
-        Button helpBtn = theme.outlinedButton(this, "Open help and remote guide");
-        LinearLayout.LayoutParams helpParams = new LinearLayout.LayoutParams(-1, dp(48));
-        helpParams.topMargin = dp(8);
-        helpBtn.setOnClickListener(v -> showHelpDialog());
-        courtForm.addView(helpBtn, helpParams);
-
-        LinearLayout settingsContent = box(surface);
-        HorizontalScrollView tabStrip = new HorizontalScrollView(this);
-        tabStrip.setHorizontalScrollBarEnabled(false);
-        tabStrip.setFillViewport(true);
-        LinearLayout tabs = new LinearLayout(this);
-        tabs.setGravity(Gravity.CENTER_VERTICAL);
-        tabStrip.addView(tabs);
-        settingsContent.addView(tabStrip, new LinearLayout.LayoutParams(-1, dp(56)));
-
-        FrameLayout pageFrame = new FrameLayout(this);
-        String[] titles = {"Players & rules", "Appearance", "Remote keys", "Court & help"};
-        LinearLayout[] forms = {playersForm, appearanceForm, remoteForm, courtForm};
-        ScrollView[] pages = new ScrollView[forms.length];
-        Button[] tabButtons = new Button[forms.length];
-        for (int i = 0; i < forms.length; i++) {
-            final int selected = i;
-            pages[i] = new ScrollView(this);
-            pages[i].setFillViewport(true);
-            pages[i].addView(forms[i]);
-            pages[i].setVisibility(i == 0 ? View.VISIBLE : View.GONE);
-            pageFrame.addView(pages[i], new FrameLayout.LayoutParams(-1, -1));
-
-            Button tab = theme.outlinedButton(this, titles[i]);
-            tab.setTextSize(15);
-            tab.setSingleLine(true);
-            tab.setContentDescription(titles[i] + ", settings tab " + (i + 1) + " of 4");
-            tab.setOnClickListener(v -> selectSettingsTab(selected, pages, tabButtons));
-            tabButtons[i] = tab;
-            LinearLayout.LayoutParams tabParams = new LinearLayout.LayoutParams(-2, dp(48));
-            tabParams.setMargins(dp(4), 0, dp(4), 0);
-            tabs.addView(tab, tabParams);
-        }
-        selectSettingsTab(initialTab, pages, tabButtons);
-        int pageHeight = Math.min(dp(480), Math.max(dp(180), getResources().getDisplayMetrics().heightPixels - dp(190)));
-        settingsContent.addView(pageFrame, new LinearLayout.LayoutParams(-1, pageHeight));
-        View[] settingsInputs = {
-            profileOne, profileTwo, nameOne, nameTwo, points, sets,
-            darkBox, hcBox, colorOne, colorTwo, pilotOne, pilotTwo, pilotUndo, pilotReset,
-            duration, green, yellow, red, vibration
-        };
-        String baseline = settingsSignature(settingsInputs);
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("Set up match and settings")
-            .setView(settingsContent)
-            .setNegativeButton("Cancel action", null)
-            .setPositiveButton("Save settings", null)
-            .create();
-
-        dialog.setOnShowListener(x -> {
-            if (dialog.getWindow() != null) {
-                dialog.getWindow().setBackgroundDrawable(new ColorDrawable(surface));
-            }
-            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(theme.primary);
-            Button save = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
-            save.setTextColor(theme.primary);
-            save.setOnClickListener(v -> {
-                if (saveSettings(
-                    profiles, profileOne, profileTwo, nameOne, nameTwo,
-                    points, sets, darkBox, hcBox, colorOne, colorTwo,
-                    pilotOne, pilotTwo, pilotUndo, pilotReset,
-                    duration, green, yellow, red, vibration
-                )) {
-                    dialog.dismiss();
-                }
-            });
-            protectSettingsDialog(dialog, baseline, settingsInputs);
-        });
-        dialog.show();
-    }
-
-    private void showHelpDialog() {
-        String guide =
-            "1. SCORE ON THE SCREEN\n" +
-            "1. Tap the Player 1 panel to add 1 point to Player 1.\n" +
-            "2. Tap the Player 2 panel to add 1 point to Player 2.\n" +
-            "3. Tap Undo point to remove the last point.\n" +
-            "The app awards a game at 11 points with a 2-point lead.\n\n" +
-            "2. USE A BLUETOOTH REMOTE CONTROL\n" +
-            "WARNING: The volume keys change the score only while the Match screen is open.\n" +
-            "1. Pair the Bluetooth remote control in the Android settings.\n" +
-            "2. Press Volume + for Player 1 or Volume - for Player 2.\n" +
-            "3. Press Pause to undo 1 point, or press Play to start a new match.\n\n" +
-            "3. CONNECT THE ZEPP OS WATCH\n" +
-            "WARNING: If the watch loses the Bluetooth connection, the watch does not send the command again. This rule prevents a late point after reconnection.\n" +
-            "1. Pair the Amazfit watch with the Zepp app on the phone.\n" +
-            "2. Keep the Match screen open in DropShot (port 127.0.0.1:28282).\n" +
-            "3. Open Punkty Squash on the watch and tap +1, +2, <<, or R.";
-
-        new AlertDialog.Builder(this)
-            .setTitle("Help and remote control guide")
-            .setMessage(guide)
-            .setPositiveButton("Close guide", null)
-            .show();
-    }
-
-    private CheckBox checkBox(String label, boolean checked) {
-        CheckBox box = new CheckBox(this);
-        box.setText(label);
-        box.setTextSize(16);
-        box.setTextColor(foreground);
-        box.setMinHeight(dp(48));
-        box.setMinimumHeight(dp(48));
-        box.setChecked(checked);
-        return box;
-    }
-
-    private LinearLayout settingsPage() {
-        LinearLayout page = box(surface);
-        page.setPadding(dp(20), dp(12), dp(20), dp(12));
-        return page;
-    }
-
-    private void selectSettingsTab(int selected, ScrollView[] pages, Button[] tabs) {
-        for (int i = 0; i < tabs.length; i++) {
-            boolean active = i == selected;
-            pages[i].setVisibility(active ? View.VISIBLE : View.GONE);
-            tabs[i].setSelected(active);
-            tabs[i].setTypeface(active ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
-            tabs[i].setTextColor(active ? theme.onSecondaryContainer : theme.onSurface);
-            tabs[i].setBackground(theme.interactiveBackground(
-                this,
-                active ? theme.secondaryContainer : theme.surfaceLow,
-                24,
-                1,
-                active ? theme.primary : theme.outline
-            ));
-        }
-    }
-
-    private AdapterView.OnItemSelectedListener profileVisibility(final Spinner spinner, final View... rows) {
-        return new AdapterView.OnItemSelectedListener() {
-            @Override public void onNothingSelected(AdapterView<?> p) { }
-            @Override public void onItemSelected(AdapterView<?> p, View v, int pos, long id) {
-                for (View row : rows) row.setVisibility(pos == 0 ? View.VISIBLE : View.GONE);
-            }
-        };
-    }
-
-    private int profileIndex(List<PlayerProfile> p, String id) {
-        if (id != null) {
-            for (int i = 0; i < p.size(); i++) {
-                if (id.equals(p.get(i).id)) return i + 1;
-            }
-        }
-        return 0;
-    }
-
-    private LinearLayout settingRow(String label, View input) {
-        LinearLayout row = box(surface);
-        TextView c = text(label, 16, muted);
-        c.setPadding(0, dp(8), 0, dp(2));
-        row.addView(c);
-        row.addView(input, new LinearLayout.LayoutParams(-1, dp(48)));
-        return row;
-    }
-
-    private void addSetting(LinearLayout f, String label, EditText input) {
-        TextView c = text(label, 16, muted);
-        c.setPadding(0, dp(8), 0, dp(2));
-        f.addView(c);
-        f.addView(input, new LinearLayout.LayoutParams(-1, dp(48)));
-    }
-
-    private void addSetting(LinearLayout f, String label, Spinner input) {
-        TextView c = text(label, 16, muted);
-        c.setPadding(0, dp(8), 0, dp(2));
-        f.addView(c);
-        f.addView(input, new LinearLayout.LayoutParams(-1, dp(48)));
-    }
-
-    private Spinner spinner(String[] values, int selected) {
-        return theme.styledSpinner(this, values, selected);
-    }
-
-    private EditText field(String value, int type) {
-        return theme.editField(this, value, null, type);
-    }
-
-    private String settingsSignature(View... inputs) {
-        StringBuilder signature = new StringBuilder();
-        for (View input : inputs) {
-            if (input instanceof EditText) {
-                String value = ((EditText) input).getText().toString();
-                signature.append('E').append(value.length()).append(':').append(value);
-            } else if (input instanceof Spinner) {
-                signature.append('S').append(((Spinner) input).getSelectedItemPosition());
-            } else if (input instanceof CompoundButton) {
-                signature.append('B').append(((CompoundButton) input).isChecked());
-            }
-            signature.append(';');
-        }
-        return signature.toString();
-    }
-
-    private void leaveSettings(AlertDialog dialog, String initial, Runnable after, View... inputs) {
-        if (initial.equals(settingsSignature(inputs))) {
-            dialog.dismiss();
-            if (after != null) after.run();
-            return;
-        }
-        new AlertDialog.Builder(this)
-            .setTitle("Discard unsaved changes?")
-            .setMessage("You changed the settings. If you leave now, the app will not save the changes.")
-            .setNegativeButton("Keep editing", null)
-            .setPositiveButton("Discard changes", (ignored, which) -> {
-                dialog.dismiss();
-                if (after != null) after.run();
-            })
-            .show();
-    }
-
-    private void protectSettingsDialog(AlertDialog dialog, String initial, View... inputs) {
-        dialog.setCanceledOnTouchOutside(false);
-        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(v -> leaveSettings(dialog, initial, null, inputs));
-        dialog.setOnKeyListener((ignored, key, event) -> {
-            if (key != KeyEvent.KEYCODE_BACK) return false;
-            if (event.getAction() == KeyEvent.ACTION_UP) leaveSettings(dialog, initial, null, inputs);
-            return true;
-        });
-    }
-
-    private boolean saveSettings(
-        List<PlayerProfile> profiles,
-        Spinner profileOne,
-        Spinner profileTwo,
-        EditText nameOne,
-        EditText nameTwo,
-        EditText points,
-        EditText sets,
-        CheckBox darkBox,
-        CheckBox hcBox,
-        Spinner colorOne,
-        Spinner colorTwo,
-        Spinner pilotOne,
-        Spinner pilotTwo,
-        Spinner pilotUndo,
-        Spinner pilotReset,
-        EditText duration,
-        EditText green,
-        EditText yellow,
-        EditText red,
-        CheckBox vibration
-    ) {
-        try {
-            int pts = Integer.parseInt(points.getText().toString().trim());
-            int sts = Integer.parseInt(sets.getText().toString().trim());
-            if (pts < 1 || sts < 1) throw new NumberFormatException();
-
-            int courtDuration, courtGreen, courtYellow, courtRed;
-            try {
-                courtDuration = Integer.parseInt(duration.getText().toString().trim());
-                courtGreen = Integer.parseInt(green.getText().toString().trim());
-                courtYellow = Integer.parseInt(yellow.getText().toString().trim());
-                courtRed = Integer.parseInt(red.getText().toString().trim());
-                if (courtDuration < 1 || courtDuration > 1440 || courtRed < 0
-                    || courtRed >= courtYellow || courtYellow >= courtGreen || courtGreen >= courtDuration) {
-                    throw new NumberFormatException();
-                }
-            } catch (NumberFormatException error) {
-                new AlertDialog.Builder(this)
-                    .setTitle("Invalid court timer values")
-                    .setMessage("The court timer values must follow 0 <= red < yellow < green < duration (maximum 1440 min). Enter whole numbers in min.")
-                    .setPositiveButton("Close dialog", null)
-                    .show();
-                return false;
-            }
-
-            String nextProfileOneId = selectedProfileId(profiles, profileOne);
-            String nextProfileTwoId = selectedProfileId(profiles, profileTwo);
-            PlayerProfile one = ProfileStore.find(this, nextProfileOneId);
-            PlayerProfile two = ProfileStore.find(this, nextProfileTwoId);
-            String nextNameOne = one == null ? cleanName(nameOne.getText().toString(), "PLAYER 1") : one.name;
-            String nextNameTwo = two == null ? cleanName(nameTwo.getText().toString(), "PLAYER 2") : two.name;
-            int c1 = one == null ? colorAt(colorOne.getSelectedItemPosition()) : one.color;
-            int c2 = two == null ? colorAt(colorTwo.getSelectedItemPosition()) : two.color;
+        SettingsDialog.show(this, initialTab, () -> {
+            int pts = AppPreferences.pointsPerSet(this);
+            int sts = AppPreferences.setsPerMatch(this);
+            String nextProfileOneId = AppPreferences.profileOneId(this);
+            String nextProfileTwoId = AppPreferences.profileTwoId(this);
+            String nextNameOne = AppPreferences.playerOneName(this);
+            String nextNameTwo = AppPreferences.playerTwoName(this);
+            int c1 = AppPreferences.color(this, "color1", AppPreferences.BLUE);
+            int c2 = AppPreferences.color(this, "color2", AppPreferences.RED);
 
             boolean matchConfigChanged =
                 pts != match.getPointsToWinSet()
@@ -731,48 +498,13 @@ public class MainActivity extends Activity {
                 archiveCurrentMatch();
                 match.configure(pts, sts);
                 resetClock();
-                currentMatchId = System.currentTimeMillis();
+                currentMatchId = InputValidator.generateSecureMatchId();
             }
 
-            AppPreferences.save(
-                this,
-                darkBox.isChecked(),
-                c1,
-                c2,
-                remoteAt(pilotOne.getSelectedItemPosition()),
-                remoteAt(pilotTwo.getSelectedItemPosition())
-            );
-            AppPreferences.saveAppearance(this, darkBox.isChecked(), hcBox.isChecked());
-            AppPreferences.saveRules(this, pts, sts);
-            AppPreferences.saveExtra(
-                this,
-                remoteAt(pilotUndo.getSelectedItemPosition()),
-                remoteAt(pilotReset.getSelectedItemPosition())
-            );
-            AppPreferences.saveCourtSettings(this, courtDuration, courtGreen, courtYellow, courtRed);
-            AppPreferences.saveCourtVibration(this, vibration.isChecked());
             loadStyle();
             setContentView(createContent());
             refreshScreen();
-            return true;
-        } catch (NumberFormatException e) {
-            new AlertDialog.Builder(this)
-                .setTitle("Invalid rule value")
-                .setMessage("The rule value is not valid. Each value must be at least 1. Enter a whole number of 1 or more.")
-                .setPositiveButton("Close dialog", null)
-                .show();
-            return false;
-        }
-    }
-
-    private String selectedProfileId(List<PlayerProfile> p, Spinner s) {
-        int i = s.getSelectedItemPosition();
-        return i == 0 ? null : p.get(i - 1).id;
-    }
-
-    private String cleanName(String s, String fallback) {
-        s = s.trim();
-        return s.isEmpty() ? fallback : s.toUpperCase(Locale.getDefault());
+        });
     }
 
     private void createMediaSession() {
@@ -861,6 +593,32 @@ public class MainActivity extends Activity {
             refreshScreen();
             return true;
         }
+        if ("TOGGLE_PAUSE".equals(command)) {
+            if (match.isMatchFinished()) {
+                resetMatchSafely();
+                return true;
+            }
+            if (awaitingNextGame) {
+                awaitingNextGame = false;
+                resumeMatch();
+                refreshScreen();
+                return true;
+            }
+            togglePause();
+            return true;
+        }
+        if ("TOGGLE_SIDE".equals(command)) {
+            if (match.isMatchFinished() || !match.canChooseServiceSide()) return false;
+            boolean toggled = match.toggleServiceSide();
+            if (toggled) refreshScreen();
+            return toggled;
+        }
+        if ("SWITCH_SERVER".equals(command)) {
+            if (match.isMatchFinished() || !match.canSelectInitialServer()) return false;
+            boolean switched = match.switchInitialServer();
+            if (switched) refreshScreen();
+            return switched;
+        }
         if ("RESET".equals(command)) {
             resetMatchSafely();
             return true;
@@ -868,8 +626,53 @@ public class MainActivity extends Activity {
         return false;
     }
 
+    private String computeWatchActionLabel() {
+        if (awaitingNextGame && !match.isMatchFinished()) {
+            return "NEXT";
+        }
+        if (match.isMatchFinished() || paused) {
+            return "START";
+        }
+        return "STOP";
+    }
+
+    private String buildWatchStateLine() {
+        RewardCatalog.Reward r1 = RewardCatalog.byKey(playerOneColor);
+        RewardCatalog.Reward r2 = RewardCatalog.byKey(playerTwoColor);
+        boolean p1Rainbow = playerOneColor == BluetoothWatchServer.RAINBOW_COLOR_KEY
+            || (r1 != null && "rainbow".equalsIgnoreCase(r1.id));
+        boolean p2Rainbow = playerTwoColor == BluetoothWatchServer.RAINBOW_COLOR_KEY
+            || (r2 != null && "rainbow".equalsIgnoreCase(r2.id));
+        int c1 = (r1 != null && r1.colors.length > 1) ? playerOneColor
+            : (theme != null ? theme.playerPanelFill(playerOneColor) : playerOneColor);
+        int c2 = (r2 != null && r2.colors.length > 1) ? playerTwoColor
+            : (theme != null ? theme.playerPanelFill(playerTwoColor) : playerTwoColor);
+        return BluetoothWatchServer.buildStateJsonLine(
+            playerOneName,
+            playerTwoName,
+            match.getPlayerOnePoints(),
+            match.getPlayerTwoPoints(),
+            match.getPlayerOneSets(),
+            match.getPlayerTwoSets(),
+            match.getSetsToWinMatch(),
+            match.getActiveServer(),
+            match.getServiceSide(),
+            match.canChooseServiceSide(),
+            match.canSelectInitialServer(),
+            c1,
+            p1Rainbow,
+            c2,
+            p2Rainbow,
+            computeWatchActionLabel(),
+            match.isGameOrMatchBall(),
+            match.isMatchFinished(),
+            paused
+        );
+    }
+
     private void addPoint(int player) {
         if (paused || match.isMatchFinished()) return;
+        awaitingNextGame = false;
         tickClock();
         int oldSets = match.getPlayerOneSets() + match.getPlayerTwoSets();
         match.addPoint(player);
@@ -877,8 +680,14 @@ public class MainActivity extends Activity {
         if (match.getPlayerOneSets() + match.getPlayerTwoSets() > oldSets) {
             setDurationsMs.add(currentSetElapsedMs);
             currentSetElapsedMs = 0;
+            if (!match.isMatchFinished()) {
+                awaitingNextGame = true;
+                pauseMatch();
+                archiveCurrentMatch();
+            }
         }
         if (match.isMatchFinished()) {
+            awaitingNextGame = false;
             pauseMatch();
             archiveCurrentMatch();
             showMatchFinished();
@@ -889,6 +698,7 @@ public class MainActivity extends Activity {
     private void restoreSetAfterUndo(int before) {
         if (match.getPlayerOneSets() + match.getPlayerTwoSets() < before && !setDurationsMs.isEmpty()) {
             currentSetElapsedMs = setDurationsMs.remove(setDurationsMs.size() - 1);
+            awaitingNextGame = false;
         }
         while (pointTimesMs.size() > match.getPointWinners().size()) {
             pointTimesMs.remove(pointTimesMs.size() - 1);
@@ -897,6 +707,7 @@ public class MainActivity extends Activity {
 
     private void togglePause() {
         if (match.isMatchFinished()) return;
+        awaitingNextGame = false;
         if (paused) resumeMatch(); else pauseMatch();
         refreshScreen();
     }
@@ -907,6 +718,7 @@ public class MainActivity extends Activity {
     }
 
     private void resetClock() {
+        awaitingNextGame = false;
         matchElapsedMs = 0;
         currentSetElapsedMs = 0;
         setDurationsMs.clear();
@@ -986,6 +798,8 @@ public class MainActivity extends Activity {
 
         updateBallBorder(1);
         updateBallBorder(2);
+        updatePhoneServeBadge(1);
+        updatePhoneServeBadge(2);
 
         pauseButton.setText(paused ? "▶" : "Ⅱ");
         pauseButton.setContentDescription(paused ? "Resume match." : "Pause match.");
@@ -1013,8 +827,49 @@ public class MainActivity extends Activity {
         updateCourtTimer();
         courtAlertView.bringToFront();
         if (bottomNav != null) {
-            bottomNav.setPinned(paused && !match.isMatchFinished());
-            if (finishedOverlay == null) bottomNav.bringToFront();
+            boolean shouldShowNav = paused || match.isMatchFinished() || !match.hasPoints();
+            setBottomNavVisible(shouldShowNav);
+            if (shouldShowNav && finishedOverlay == null) {
+                bottomNav.bringToFront();
+            }
+        }
+        if (bluetoothWatchServer != null) {
+            bluetoothWatchServer.broadcastStateAsync(buildWatchStateLine());
+        }
+    }
+
+    private void setBottomNavVisible(boolean show) {
+        if (bottomNav == null) return;
+        if (bottomNavVisible == show && bottomNav.getVisibility() == (show ? View.VISIBLE : View.GONE)) {
+            return;
+        }
+        bottomNavVisible = show;
+        bottomNav.animate().cancel();
+        if (show) {
+            bottomNav.setVisibility(View.VISIBLE);
+            if (UiTheme.isReduceMotionEnabled(this)) {
+                bottomNav.setTranslationY(0);
+                bottomNav.setAlpha(1f);
+            } else {
+                bottomNav.setTranslationY(dp(56));
+                bottomNav.setAlpha(0f);
+                bottomNav.animate().translationY(0).alpha(1f).setDuration(220).start();
+            }
+        } else {
+            if (UiTheme.isReduceMotionEnabled(this)) {
+                bottomNav.setVisibility(View.GONE);
+            } else {
+                bottomNav.animate()
+                    .translationY(dp(56))
+                    .alpha(0f)
+                    .setDuration(220)
+                    .withEndAction(() -> {
+                        if (!bottomNavVisible && bottomNav != null) {
+                            bottomNav.setVisibility(View.GONE);
+                        }
+                    })
+                    .start();
+            }
         }
     }
 
@@ -1045,13 +900,17 @@ public class MainActivity extends Activity {
             pointTimesMs,
             paused,
             playerOneColor,
-            playerTwoColor
+            playerTwoColor,
+            match.getInitialServer(),
+            match.getEncodedPointSides()
         );
     }
 
     private void archiveCurrentMatch() {
         if (!match.hasPoints()) return;
-        MatchHistoryStore.add(this, buildCurrentRecord());
+        MatchRecord record = buildCurrentRecord();
+        MatchHistoryStore.add(this, record);
+        SupabaseSyncClient.syncMatchInBackground(this, record);
     }
 
     private void restoreMatchFromIntent(Intent intent) {
@@ -1083,7 +942,9 @@ public class MainActivity extends Activity {
                 r.playerOneSets,
                 r.playerTwoSets,
                 r.finished,
-                r.pointWinners
+                r.pointWinners,
+                r.initialServer,
+                r.pointSides
             );
             matchElapsedMs = r.durationMs;
             setDurationsMs.clear();
@@ -1130,41 +991,17 @@ public class MainActivity extends Activity {
         surface = theme.surface;
         foreground = theme.onSurface;
         muted = theme.onSurfaceVariant;
+        playerOneName = AppPreferences.playerOneName(this);
+        playerTwoName = AppPreferences.playerTwoName(this);
+        playerOneProfileId = AppPreferences.profileOneId(this);
+        playerTwoProfileId = AppPreferences.profileTwoId(this);
         playerOneColor = AppPreferences.color(this, "color1", AppPreferences.BLUE);
         playerTwoColor = AppPreferences.color(this, "color2", AppPreferences.RED);
+        showServeSideIndicator = AppPreferences.showServeSideIndicator(this);
         remoteOne = AppPreferences.remote(this, "remote1", KeyEvent.KEYCODE_VOLUME_UP);
         remoteTwo = AppPreferences.remote(this, "remote2", KeyEvent.KEYCODE_VOLUME_DOWN);
         remoteUndo = AppPreferences.remote(this, "undo", KeyEvent.KEYCODE_MEDIA_PAUSE);
         remoteReset = AppPreferences.remote(this, "reset", KeyEvent.KEYCODE_MEDIA_PLAY);
-    }
-
-    private int[] colors() { return UiTheme.playerColors(this); }
-    private String[] colorNames() { return UiTheme.playerColorNames(this); }
-    private int colorAt(int i) { return colors()[i]; }
-    private int colorIndex(int c) {
-        int[] x = colors();
-        for (int i = 0; i < x.length; i++) if (x[i] == c) return i;
-        return 0;
-    }
-
-    private String[] remoteNames() {
-        return new String[]{"Volume +", "Volume -", "Next track", "Previous track"};
-    }
-
-    private int[] remotes() {
-        return new int[]{
-            KeyEvent.KEYCODE_VOLUME_UP,
-            KeyEvent.KEYCODE_VOLUME_DOWN,
-            KeyEvent.KEYCODE_MEDIA_NEXT,
-            KeyEvent.KEYCODE_MEDIA_PREVIOUS
-        };
-    }
-
-    private int remoteAt(int i) { return remotes()[i]; }
-    private int remoteIndex(int k) {
-        int[] r = remotes();
-        for (int i = 0; i < r.length; i++) if (r[i] == k) return i;
-        return 0;
     }
 
     private void syncFireworks() {
@@ -1308,7 +1145,8 @@ public class MainActivity extends Activity {
 
         if (!isBallFor(player) || match.isMatchFinished()) {
             stopBallPulse(player);
-            border.setStroke(dp(3), strokeColor);
+            boolean activeServer = !match.isMatchFinished() && match.getActiveServer() == player;
+            border.setStroke(dp(activeServer ? 5 : 2), strokeColor);
             return;
         }
         if (UiTheme.isReduceMotionEnabled(this)) {
@@ -1330,6 +1168,57 @@ public class MainActivity extends Activity {
         pulse.start();
     }
 
+    private void updatePhoneServeBadge(int player) {
+        FrameLayout container = player == 1 ? playerOneServeContainer : playerTwoServeContainer;
+        TextView badge = player == 1 ? playerOneServeBadge : playerTwoServeBadge;
+        GradientDrawable bg = player == 1 ? playerOneServeBadgeBg : playerTwoServeBadgeBg;
+        if (container == null || badge == null || bg == null) return;
+
+        if (!showServeSideIndicator || match.isMatchFinished()) {
+            container.setVisibility(View.GONE);
+            return;
+        }
+
+        int activeServer = match.getActiveServer();
+        String side = match.getServiceSide();
+        boolean canPickSide = match.canChooseServiceSide();
+        boolean canPickServer = match.canSelectInitialServer();
+
+        if (activeServer == player) {
+            container.setVisibility(View.VISIBLE);
+            badge.setText("[" + side + "]");
+            if (canPickSide) {
+                container.setClickable(true);
+                bg.setColor(0x55000000);
+                bg.setStroke(dp(2), 0xDDFFFFFF);
+                badge.setTextColor(Color.WHITE);
+                container.setContentDescription(
+                    "Serve side " + ("L".equals(side) ? "left" : "right") + ". Tap to switch serve side."
+                );
+            } else {
+                container.setClickable(false);
+                bg.setColor(0x66B71C1C);
+                bg.setStroke(dp(1), 0x88EF5350);
+                badge.setTextColor(0xCCFFCDD2);
+                container.setContentDescription(
+                    "Serve side " + ("L".equals(side) ? "left" : "right") + " locked during serve streak."
+                );
+            }
+        } else if (canPickServer) {
+            container.setVisibility(View.VISIBLE);
+            container.setClickable(true);
+            badge.setText("[SERVE]");
+            bg.setColor(0x44000000);
+            bg.setStroke(dp(1), 0xAAFFFFFF);
+            badge.setTextColor(0xEEFFFFFF);
+            String name = player == 1 ? playerOneName : playerTwoName;
+            container.setContentDescription("Tap to set " + name + " as starting server.");
+        } else {
+            container.setVisibility(View.GONE);
+            container.setClickable(false);
+        }
+    }
+
     private void stopBallPulse(int player) {
         ValueAnimator pulse = player == 1 ? playerOnePulse : playerTwoPulse;
         if (pulse != null) pulse.cancel();
@@ -1337,13 +1226,18 @@ public class MainActivity extends Activity {
     }
 
     private void showMatchFinished() {
+        String winnerName = match.getWinner() == 1 ? playerOneName : playerTwoName;
+        String finalScore = match.getPlayerOneSets() + " - " + match.getPlayerTwoSets();
+        if (bluetoothWatchServer != null) {
+            bluetoothWatchServer.broadcastMatchEndedAsync(winnerName, finalScore);
+        }
         finishedOverlay = new MatchFinishedView(
             this,
-            match.getWinner() == 1 ? playerOneName : playerTwoName,
+            winnerName,
             () -> {
                 finishedOverlay = null;
                 match.reset();
-                currentMatchId = System.currentTimeMillis();
+                currentMatchId = InputValidator.generateSecureMatchId();
                 resetClock();
                 refreshScreen();
             },
@@ -1390,7 +1284,7 @@ public class MainActivity extends Activity {
         pauseMatch();
         archiveCurrentMatch();
         match.reset();
-        currentMatchId = System.currentTimeMillis();
+        currentMatchId = InputValidator.generateSecureMatchId();
         resetClock();
         refreshScreen();
     }
@@ -1420,6 +1314,7 @@ public class MainActivity extends Activity {
         b.setMinimumHeight(dp(48));
         b.setPadding(dp(10), 0, dp(10), 0);
         b.setBackground(theme.interactiveBackground(this, color, 12, 1, theme.outlineVariant));
+        b.setFilterTouchesWhenObscured(true);
         return b;
     }
 

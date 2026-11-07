@@ -239,6 +239,8 @@ public final class UiTheme {
         button.setMinimumHeight(dp(context, 48));
         button.setPadding(dp(context, 16), 0, dp(context, 16), 0);
         button.setBackground(interactiveBackground(context, primary, 24, 0, 0));
+        // [MASVS-PLATFORM] Reject touches when an untrusted overlay obscures the view (anti-tapjacking)
+        button.setFilterTouchesWhenObscured(true);
         return button;
     }
 
@@ -253,6 +255,7 @@ public final class UiTheme {
         button.setMinimumHeight(dp(context, 48));
         button.setPadding(dp(context, 16), 0, dp(context, 16), 0);
         button.setBackground(interactiveBackground(context, secondaryContainer, 24, 0, 0));
+        button.setFilterTouchesWhenObscured(true);
         return button;
     }
 
@@ -266,6 +269,7 @@ public final class UiTheme {
         button.setMinimumHeight(dp(context, 48));
         button.setPadding(dp(context, 14), 0, dp(context, 14), 0);
         button.setBackground(interactiveBackground(context, surfaceLow, 24, 1, outline));
+        button.setFilterTouchesWhenObscured(true);
         return button;
     }
 
@@ -280,6 +284,7 @@ public final class UiTheme {
         button.setMinimumHeight(dp(context, 48));
         button.setPadding(dp(context, 14), 0, dp(context, 14), 0);
         button.setBackground(interactiveBackground(context, errorContainer, 24, 1, error));
+        button.setFilterTouchesWhenObscured(true);
         return button;
     }
 
@@ -345,10 +350,12 @@ public final class UiTheme {
         return spinner;
     }
 
+    @Deprecated
     public CollapsibleBottomNav createCollapsibleBottomNav(Activity activity, int activeTab, Runnable onOpenSettingsHere) {
         return new CollapsibleBottomNav(activity, activeTab, onOpenSettingsHere);
     }
 
+    @Deprecated
     public final class CollapsibleBottomNav extends FrameLayout {
         private static final long HIDE_DELAY_MS = 5000;
         private final Handler handler = new Handler(Looper.getMainLooper());
@@ -429,81 +436,128 @@ public final class UiTheme {
         }
     }
 
-    /** Creates the bottom navigation bar used inside the expandable menu. */
-    public View createBottomNavBar(Activity activity, int activeTab, Runnable onOpenSettingsHere) {
-        LinearLayout bar = new LinearLayout(activity);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setBackgroundColor(surface);
-        bar.setPadding(dp(activity, 8), dp(activity, 6), dp(activity, 8), dp(activity, 6));
+    public interface BottomNavListener {
+        void onTabSelected(int tab);
+    }
 
-        String[] labels = {"Match", "History", "Players", "Settings"};
-        String[] descriptions = {
-            "Match, tab 1 of 4",
-            "History, tab 2 of 4",
-            "Players, tab 3 of 4",
-            "Settings, tab 4 of 4"
-        };
+    /** Creates the bottom navigation bar with 4 evenly distributed destinations. */
+    public BottomNavBar createBottomNavBar(Activity activity, int activeTab, Runnable onOpenSettingsHere) {
+        return createBottomNavBar(activity, activeTab, null, onOpenSettingsHere);
+    }
 
-        for (int i = 0; i < labels.length; i++) {
-            final int tab = i;
-            boolean selected = (i == activeTab);
-            Button item = new Button(activity);
-            item.setAllCaps(false);
-            item.setSingleLine(true);
-            item.setEllipsize(TextUtils.TruncateAt.END);
-            item.setText(labels[i]);
-            item.setTextSize(14);
-            item.setTypeface(selected ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
-            item.setTextColor(selected ? onSecondaryContainer : onSurfaceVariant);
-            item.setContentDescription(descriptions[i] + (selected ? ", selected" : ""));
-            item.setMinHeight(dp(activity, 48));
-            item.setMinimumHeight(dp(activity, 48));
-            item.setPadding(dp(activity, 2), 0, dp(activity, 2), 0);
-            item.setBackground(interactiveBackground(
-                activity,
-                selected ? secondaryContainer : Color.TRANSPARENT,
-                20,
-                selected ? 1 : 0,
-                selected ? outlineVariant : 0
-            ));
+    public BottomNavBar createBottomNavBar(Activity activity, int activeTab, BottomNavListener listener, Runnable onOpenSettingsHere) {
+        return new BottomNavBar(activity, activeTab, listener, onOpenSettingsHere);
+    }
 
-            item.setOnClickListener(v -> {
-                if (tab == activeTab && tab != TAB_SETTINGS) return;
-                if (tab == TAB_MATCH) {
-                    Intent intent = new Intent(activity, MainActivity.class);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                    activity.startActivity(intent);
-                    if (!(activity instanceof MainActivity)) activity.finish();
-                } else if (tab == TAB_HISTORY) {
-                    if (!(activity instanceof HistoryActivity)) {
-                        activity.startActivity(new Intent(activity, HistoryActivity.class));
-                        if (!(activity instanceof MainActivity)) activity.finish();
+    public final class BottomNavBar extends LinearLayout {
+        private final Activity activity;
+        private final BottomNavListener listener;
+        private final Runnable onOpenSettingsHere;
+        private final Button[] items = new Button[4];
+        private int activeTab;
+
+        public BottomNavBar(Activity activity, int activeTab, BottomNavListener listener, Runnable onOpenSettingsHere) {
+            super(activity);
+            this.activity = activity;
+            this.activeTab = activeTab;
+            this.listener = listener;
+            this.onOpenSettingsHere = onOpenSettingsHere;
+            initView();
+        }
+
+        public void setActiveTab(int tab) {
+            this.activeTab = tab;
+            updateTabStyles();
+        }
+
+        public int getActiveTab() {
+            return activeTab;
+        }
+
+        private void initView() {
+            setOrientation(LinearLayout.HORIZONTAL);
+            setGravity(Gravity.CENTER_VERTICAL);
+            setBackgroundColor(surface);
+            setPadding(dp(activity, 8), dp(activity, 4), dp(activity, 8), dp(activity, 4));
+
+            String[] labels = {"Match", "History", "Players", "Settings"};
+
+            for (int i = 0; i < labels.length; i++) {
+                final int tab = i;
+                Button item = new Button(activity);
+                item.setAllCaps(false);
+                item.setSingleLine(true);
+                item.setEllipsize(TextUtils.TruncateAt.END);
+                item.setText(labels[i]);
+                item.setTextSize(14);
+                item.setMinHeight(dp(activity, 48));
+                item.setMinimumHeight(dp(activity, 48));
+                item.setPadding(dp(activity, 2), 0, dp(activity, 2), 0);
+                item.setFilterTouchesWhenObscured(true);
+
+                item.setOnClickListener(v -> {
+                    if (tab == activeTab && tab != TAB_SETTINGS) return;
+                    if (listener != null) {
+                        listener.onTabSelected(tab);
+                        return;
                     }
-                } else if (tab == TAB_PLAYERS) {
-                    if (!(activity instanceof PlayerStatsActivity)) {
-                        activity.startActivity(new Intent(activity, PlayerStatsActivity.class));
-                        if (!(activity instanceof MainActivity)) activity.finish();
-                    }
-                } else if (tab == TAB_SETTINGS) {
-                    if (onOpenSettingsHere != null) {
-                        onOpenSettingsHere.run();
-                    } else {
+                    if (tab == TAB_MATCH) {
                         Intent intent = new Intent(activity, MainActivity.class);
                         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                        intent.putExtra(EXTRA_OPEN_SETTINGS, true);
                         activity.startActivity(intent);
-                        activity.finish();
+                        activity.overridePendingTransition(0, 0);
+                        if (!(activity instanceof MainActivity)) activity.finish();
+                    } else if (tab == TAB_HISTORY) {
+                        Intent intent = new Intent(activity, HistoryActivity.class);
+                        intent.putExtra(HistoryActivity.EXTRA_ACTIVE_TAB, TAB_HISTORY);
+                        activity.startActivity(intent);
+                        activity.overridePendingTransition(0, 0);
+                        if (!(activity instanceof MainActivity)) activity.finish();
+                    } else if (tab == TAB_PLAYERS) {
+                        Intent intent = new Intent(activity, HistoryActivity.class);
+                        intent.putExtra(HistoryActivity.EXTRA_ACTIVE_TAB, TAB_PLAYERS);
+                        activity.startActivity(intent);
+                        activity.overridePendingTransition(0, 0);
+                        if (!(activity instanceof MainActivity)) activity.finish();
+                    } else if (tab == TAB_SETTINGS) {
+                        if (onOpenSettingsHere != null) {
+                            onOpenSettingsHere.run();
+                        } else {
+                            SettingsDialog.show(activity, 0, null);
+                        }
                     }
-                }
-            });
+                });
 
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(activity, 48), 1f);
-            lp.setMargins(dp(activity, 2), 0, dp(activity, 2), 0);
-            bar.addView(item, lp);
-            if (i == 1) bar.addView(new View(activity), new LinearLayout.LayoutParams(dp(activity, 48), dp(activity, 48)));
+                items[i] = item;
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(activity, 48), 1f);
+                lp.setMargins(dp(activity, 2), 0, dp(activity, 2), 0);
+                addView(item, lp);
+            }
+            updateTabStyles();
         }
-        return bar;
+
+        private void updateTabStyles() {
+            String[] descriptions = {
+                "Match, tab 1 of 4",
+                "History, tab 2 of 4",
+                "Players, tab 3 of 4",
+                "Settings, tab 4 of 4"
+            };
+            for (int i = 0; i < 4; i++) {
+                boolean selected = (i == activeTab);
+                Button item = items[i];
+                item.setTypeface(selected ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+                item.setTextColor(selected ? onSecondaryContainer : onSurfaceVariant);
+                item.setContentDescription(descriptions[i] + (selected ? ", selected" : ""));
+                item.setBackground(interactiveBackground(
+                    activity,
+                    selected ? secondaryContainer : Color.TRANSPARENT,
+                    20,
+                    selected ? 1 : 0,
+                    selected ? outlineVariant : 0
+                ));
+            }
+        }
     }
 }
 

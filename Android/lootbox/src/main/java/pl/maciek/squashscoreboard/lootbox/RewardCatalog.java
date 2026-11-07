@@ -2,15 +2,30 @@ package pl.maciek.squashscoreboard.lootbox;
 
 import android.animation.ValueAnimator;
 import android.graphics.drawable.GradientDrawable;
+import android.provider.Settings;
 import android.view.View;
 import android.view.animation.LinearInterpolator;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Random;
 
-/** Single, versioned reward database. Edit ENTRIES to add, remove or retier cosmetics. */
+/**
+ * [MASVS-CODE] [PERF-120HZ]
+ * Single, versioned reward catalog for colors and bundled fonts.
+ * - Precomputes O(1) lookup tables by ID, color key, kind, and tier at class initialization
+ *   so 50-slot reel generation and 120 Hz rendering perform zero list allocations.
+ * - Uses primitive ARGB channel interpolation and view-bound animator cancellation.
+ */
 public final class RewardCatalog {
+    private static final int ANIMATOR_TAG_KEY = 0x7f0b00f1;
+    private static final int[] EMPTY_COLORS = new int[0];
+
     public enum Kind { COLOR, FONT }
+
     public static final class Reward {
         public final String id, name;
         public final LootTier tier;
@@ -24,7 +39,7 @@ public final class RewardCatalog {
             this.name = name;
             this.tier = tier;
             this.kind = Kind.COLOR;
-            this.colors = colors;
+            this.colors = colors.clone();
             this.animated = animated;
             this.fontFile = null;
         }
@@ -34,31 +49,40 @@ public final class RewardCatalog {
             this.name = name;
             this.tier = tier;
             this.kind = Kind.FONT;
-            this.colors = new int[0];
+            this.colors = EMPTY_COLORS;
             this.animated = false;
             this.fontFile = fontFile;
         }
 
         /** Persisted player color key; the first gradient stop is deliberately unique. */
         public int key() {
-            if (kind != Kind.COLOR) throw new IllegalStateException("Font has no color key: " + id);
+            if (kind != Kind.COLOR) {
+                throw new IllegalStateException("Font reward has no color key: " + id);
+            }
             return colors[0];
+        }
+
+        /** Defensive copy of color stops to prevent external array mutation. */
+        public int[] colorsCopy() {
+            return colors.length == 0 ? EMPTY_COLORS : colors.clone();
         }
     }
 
     private static Reward solid(String id, String name, LootTier tier, int color) {
         return new Reward(id, name, tier, false, color);
     }
+
     private static Reward gradient(String id, String name, LootTier tier, int... colors) {
         return new Reward(id, name, tier, false, colors);
     }
+
     private static Reward font(String id, String name, LootTier tier, String file) {
         return new Reward(id, name, tier, file);
     }
 
     private static final Reward DEFAULT_FONT = font("font-default", "Default", LootTier.GRAY, null);
 
-    // Keep existing four color keys for profiles, saved matches and preferences.
+    // Keep existing 4 starter color keys stable for profiles, saved matches, and preferences.
     private static final Reward[] ENTRIES = {
         solid("blue", "Blue", LootTier.GRAY, 0xFF3184FF),
         solid("red", "Red", LootTier.GRAY, 0xFFF45C5C),
@@ -103,42 +127,101 @@ public final class RewardCatalog {
         font("font-eagle-lake", "Eagle Lake", LootTier.GREEN, "eaglelake.ttf")
     };
 
+    private static final Reward[] COLOR_ENTRIES;
+    private static final Reward[] FONT_ENTRIES;
+    private static final Map<String, Reward> BY_ID;
+    private static final Map<Integer, Reward> BY_COLOR_KEY;
+    private static final EnumMap<LootTier, Reward[]> BY_TIER;
+
+    static {
+        List<Reward> colors = new ArrayList<>();
+        List<Reward> fonts = new ArrayList<>();
+        fonts.add(DEFAULT_FONT);
+
+        Map<String, Reward> idIndex = new HashMap<>(ENTRIES.length * 3);
+        Map<Integer, Reward> keyIndex = new HashMap<>(32);
+        EnumMap<LootTier, List<Reward>> tierLists = new EnumMap<>(LootTier.class);
+        for (LootTier tier : LootTier.values()) {
+            tierLists.put(tier, new ArrayList<>());
+        }
+
+        idIndex.put(DEFAULT_FONT.id.toLowerCase(Locale.ROOT), DEFAULT_FONT);
+        idIndex.put(DEFAULT_FONT.name.toLowerCase(Locale.ROOT), DEFAULT_FONT);
+
+        for (Reward reward : ENTRIES) {
+            idIndex.put(reward.id.toLowerCase(Locale.ROOT), reward);
+            idIndex.putIfAbsent(reward.name.toLowerCase(Locale.ROOT), reward);
+            tierLists.get(reward.tier).add(reward);
+            if (reward.kind == Kind.COLOR) {
+                colors.add(reward);
+                keyIndex.put(reward.key(), reward);
+            } else if (reward.kind == Kind.FONT) {
+                fonts.add(reward);
+            }
+        }
+
+        COLOR_ENTRIES = colors.toArray(new Reward[0]);
+        FONT_ENTRIES = fonts.toArray(new Reward[0]);
+        BY_ID = idIndex;
+        BY_COLOR_KEY = keyIndex;
+
+        EnumMap<LootTier, Reward[]> tierArrays = new EnumMap<>(LootTier.class);
+        for (Map.Entry<LootTier, List<Reward>> entry : tierLists.entrySet()) {
+            tierArrays.put(entry.getKey(), entry.getValue().toArray(new Reward[0]));
+        }
+        BY_TIER = tierArrays;
+    }
+
     private RewardCatalog() {}
 
-    public static Reward[] all() { return ENTRIES.clone(); }
+    public static Reward[] all() {
+        return ENTRIES.clone();
+    }
 
-    public static Reward[] colors() { return byKind(Kind.COLOR, false); }
+    public static Reward[] colors() {
+        return COLOR_ENTRIES.clone();
+    }
 
-    /** Includes the free built-in font, which cannot be drawn from a lootbox. */
-    public static Reward[] fonts() { return byKind(Kind.FONT, true); }
+    /** Includes the free built-in default font, which is never drawn from a lootbox. */
+    public static Reward[] fonts() {
+        return FONT_ENTRIES.clone();
+    }
 
-    private static Reward[] byKind(Kind kind, boolean includeDefault) {
-        List<Reward> result = new ArrayList<>();
-        if (includeDefault) result.add(DEFAULT_FONT);
-        for (Reward reward : ENTRIES) if (reward.kind == kind) result.add(reward);
-        return result.toArray(new Reward[0]);
+    public static Reward defaultFont() {
+        return DEFAULT_FONT;
+    }
+
+    /** Resolves a font reward by ID, falling back to the built-in default font. */
+    public static Reward fontOrDefault(String id) {
+        if (id == null) return DEFAULT_FONT;
+        Reward found = byId(id);
+        return (found != null && found.kind == Kind.FONT) ? found : DEFAULT_FONT;
     }
 
     public static Reward byId(String id) {
-        if (id == null || DEFAULT_FONT.id.equals(id)) return DEFAULT_FONT;
-        for (Reward reward : ENTRIES) if (reward.id.equals(id)) return reward;
-        return null;
+        if (id == null) return null;
+        String clean = id.trim();
+        if (clean.isEmpty()) return null;
+        return BY_ID.get(clean.toLowerCase(Locale.ROOT));
     }
 
     public static Reward byKey(int key) {
-        for (Reward reward : ENTRIES) if (reward.kind == Kind.COLOR && reward.key() == key) return reward;
-        return null;
+        return BY_COLOR_KEY.get(key);
     }
 
     public static Reward pick(LootTier tier, Random random) {
-        List<Reward> pool = new ArrayList<>();
-        for (Reward reward : ENTRIES) if (reward.tier == tier) pool.add(reward);
-        if (pool.isEmpty()) throw new IllegalStateException("No rewards in " + tier);
-        return pool.get(random.nextInt(pool.size()));
+        if (tier == null || random == null) {
+            throw new IllegalArgumentException("tier and random are required");
+        }
+        Reward[] pool = BY_TIER.get(tier);
+        if (pool == null || pool.length == 0) {
+            throw new IllegalStateException("No rewards in " + tier);
+        }
+        return pool[random.nextInt(pool.length)];
     }
 
     public static void paint(View view, Reward reward, float radius) {
-        if (reward == null || reward.kind != Kind.COLOR) return;
+        if (view == null || reward == null || reward.kind != Kind.COLOR) return;
         GradientDrawable drawable = new GradientDrawable();
         drawable.setOrientation(GradientDrawable.Orientation.TL_BR);
         drawable.setCornerRadius(radius);
@@ -147,16 +230,25 @@ public final class RewardCatalog {
     }
 
     public static void configure(View view, GradientDrawable drawable, Reward reward, boolean darken) {
-        if (reward == null || reward.kind != Kind.COLOR) return;
+        if (view == null || drawable == null || reward == null || reward.kind != Kind.COLOR) return;
+        // Cancel any previously attached animator on this view to prevent infinite animator leaks
+        Object existing = view.getTag(ANIMATOR_TAG_KEY);
+        if (existing instanceof ValueAnimator) {
+            ((ValueAnimator) existing).cancel();
+            view.setTag(ANIMATOR_TAG_KEY, null);
+        }
+
         drawable.setOrientation(GradientDrawable.Orientation.TL_BR);
-        int[] base = new int[reward.colors.length];
+        final int[] base = new int[reward.colors.length];
         for (int i = 0; i < base.length; i++) {
             int color = reward.colors[i];
             base[i] = darken ? blend(color, 0xFF141923, .42f) : color;
         }
         if (base.length == 1) drawable.setColor(base[0]);
         else drawable.setColors(base);
-        if (reward.animated) {
+
+        if (reward.animated && !isReduceMotion(view)) {
+            final int[] shifted = new int[base.length];
             ValueAnimator animator = ValueAnimator.ofFloat(0f, 6f);
             animator.setDuration(3200);
             animator.setRepeatCount(ValueAnimator.INFINITE);
@@ -165,27 +257,49 @@ public final class RewardCatalog {
                 float position = (float) a.getAnimatedValue();
                 int shift = (int) position;
                 float fraction = position - shift;
-                int[] shifted = new int[base.length];
-                for (int i = 0; i < shifted.length; i++)
-                    shifted[i] = blend(base[(i + shift) % 6],
-                        base[(i + shift + 1) % 6], fraction);
+                for (int i = 0; i < shifted.length; i++) {
+                    shifted[i] = blend(
+                        base[(i + shift) % 6],
+                        base[(i + shift + 1) % 6],
+                        fraction
+                    );
+                }
                 drawable.setColors(shifted);
             });
+            view.setTag(ANIMATOR_TAG_KEY, animator);
             view.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
-                @Override public void onViewAttachedToWindow(View v) { animator.start(); }
-                @Override public void onViewDetachedFromWindow(View v) { animator.cancel(); }
+                @Override public void onViewAttachedToWindow(View v) {
+                    if (v.getTag(ANIMATOR_TAG_KEY) == animator && !animator.isStarted()) {
+                        animator.start();
+                    }
+                }
+                @Override public void onViewDetachedFromWindow(View v) {
+                    animator.cancel();
+                }
             });
             if (view.isAttachedToWindow()) animator.start();
         }
     }
 
-    private static int blend(int from, int to, float amount) {
-        int result = 0;
-        for (int shift = 0; shift <= 24; shift += 8) {
-            int a = (from >>> shift) & 0xFF;
-            int b = (to >>> shift) & 0xFF;
-            result |= Math.round(a + (b - a) * amount) << shift;
+    private static boolean isReduceMotion(View view) {
+        try {
+            return Settings.Global.getFloat(
+                view.getContext().getContentResolver(),
+                Settings.Global.ANIMATOR_DURATION_SCALE,
+                1f
+            ) == 0f;
+        } catch (Exception ignored) {
+            return false;
         }
-        return result;
+    }
+
+    static int blend(int from, int to, float amount) {
+        int a1 = (from >>> 24) & 0xff, r1 = (from >>> 16) & 0xff, g1 = (from >>> 8) & 0xff, b1 = from & 0xff;
+        int a2 = (to >>> 24) & 0xff, r2 = (to >>> 16) & 0xff, g2 = (to >>> 8) & 0xff, b2 = to & 0xff;
+        int a = Math.round(a1 + (a2 - a1) * amount);
+        int r = Math.round(r1 + (r2 - r1) * amount);
+        int g = Math.round(g1 + (g2 - g1) * amount);
+        int b = Math.round(b1 + (b2 - b1) * amount);
+        return (a << 24) | (r << 16) | (g << 8) | b;
     }
 }

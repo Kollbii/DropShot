@@ -42,9 +42,7 @@ public final class PlayerCustomizationActivity extends Activity {
         if (profile == null) { finish(); return; }
         selected = RewardCatalog.byKey(profile.color);
         if (selected == null) selected = RewardCatalog.colors()[0];
-        selectedFont = RewardCatalog.byId(profile.fontId);
-        if (selectedFont == null || selectedFont.kind != RewardCatalog.Kind.FONT)
-            selectedFont = RewardCatalog.fonts()[0];
+        selectedFont = RewardCatalog.fontOrDefault(profile.fontId);
         buildScreen();
     }
 
@@ -62,11 +60,12 @@ public final class PlayerCustomizationActivity extends Activity {
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        Button back = theme.outlinedButton(this, "← Back");
+        Button back = theme.outlinedButton(this, "← Go back");
+        back.setContentDescription("Go back.");
         back.setOnClickListener(v -> finish());
         header.addView(back, new LinearLayout.LayoutParams(-2, dp(48)));
         nickname = label(profile.name + "  ✎", 24, theme.onSurface);
-        nickname.setTypeface(Typeface.DEFAULT_BOLD);
+        RewardFonts.apply(nickname, profile.fontId, 24f);
         nickname.setGravity(Gravity.CENTER_VERTICAL);
         nickname.setPadding(dp(16), 0, dp(8), 0);
         nickname.setContentDescription("Edit player name: " + profile.name);
@@ -89,11 +88,11 @@ public final class PlayerCustomizationActivity extends Activity {
             tab.setSingleLine(true);
             tab.setEllipsize(TextUtils.TruncateAt.END);
             tab.setOnClickListener(v -> { activeTab = index; buildScreen(); });
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(48), 1);
             params.setMargins(dp(2), dp(8), dp(2), dp(8));
             tabs.addView(tab, params);
         }
-        root.addView(tabs, new LinearLayout.LayoutParams(-1, dp(60)));
+        root.addView(tabs, new LinearLayout.LayoutParams(-1, dp(64)));
 
         landscape = getResources().getConfiguration().orientation
             == Configuration.ORIENTATION_LANDSCAPE;
@@ -117,6 +116,7 @@ public final class PlayerCustomizationActivity extends Activity {
         availability.setGravity(Gravity.CENTER);
         side.addView(availability, new LinearLayout.LayoutParams(-1, dp(28)));
         actionButton = theme.primaryButton(this, "Set color");
+        actionButton.setFilterTouchesWhenObscured(true);
         actionButton.setOnClickListener(v -> equipSelected());
         side.addView(actionButton, new LinearLayout.LayoutParams(-1, dp(48)));
 
@@ -226,7 +226,7 @@ public final class PlayerCustomizationActivity extends Activity {
             RewardCatalog.configure(panel, background, colorReward, true);
         TextView name = previewText(profile.name, landscape ? 14 : 18, Color.WHITE);
         RewardFonts.apply(name,
-            activeTab == 1 ? selectedFont : RewardCatalog.byId(profile.fontId),
+            activeTab == 1 ? selectedFont : RewardCatalog.fontOrDefault(profile.fontId),
             landscape ? 14f : 18f);
         TextView games = previewText("GAMES  0", landscape ? 12 : 16, 0xFFF4F0E9);
         TextView points = previewText("0", landscape ? 32 : 55, Color.WHITE);
@@ -254,6 +254,7 @@ public final class PlayerCustomizationActivity extends Activity {
                 "font-default".equals(reward.id) ? null : reward.id)
             : new PlayerProfile(profile.id, profile.name, selected.key(), profile.fontId);
         ProfileStore.update(this, profile);
+        RewardFonts.apply(nickname, profile.fontId, 24f);
         refreshSelection();
     }
 
@@ -266,12 +267,12 @@ public final class PlayerCustomizationActivity extends Activity {
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("Edit player name")
             .setView(form)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Save", null)
+            .setNegativeButton("Cancel action", null)
+            .setPositiveButton("Save name", null)
             .create();
         dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
             .setOnClickListener(v -> {
-                String next = input.getText().toString().trim();
+                String next = InputValidator.sanitizePlayerName(input.getText().toString(), "");
                 PlayerProfile duplicate = ProfileStore.findByName(this, next);
                 if (next.isEmpty() || (duplicate != null && !duplicate.id.equals(profile.id))) {
                     input.setError(next.isEmpty() ? "Enter a name" : "Name already in use");

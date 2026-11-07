@@ -9,10 +9,25 @@ public final class AppPreferences {
 
     public static boolean dark(Context c) { return c.getSharedPreferences(NAME, 0).getBoolean("dark", true); }
     public static boolean highContrast(Context c) { return c.getSharedPreferences(NAME, 0).getBoolean("highContrast", false); }
+    public static boolean showServeSideIndicator(Context c) { return c.getSharedPreferences(NAME, 0).getBoolean("showServeSideIndicator", true); }
+    public static void saveShowServeSideIndicator(Context c, boolean show) { c.getSharedPreferences(NAME, 0).edit().putBoolean("showServeSideIndicator", show).apply(); }
     public static int color(Context c, String key, int fallback) { return c.getSharedPreferences(NAME, 0).getInt(key, fallback); }
     public static int remote(Context c, String key, int fallback) { return c.getSharedPreferences(NAME, 0).getInt(key, fallback); }
     public static int pointsPerSet(Context c) { return c.getSharedPreferences(NAME, 0).getInt("pointsPerSet", 11); }
     public static int setsPerMatch(Context c) { return c.getSharedPreferences(NAME, 0).getInt("setsPerMatch", 3); }
+    public static String profileOneId(Context c) { return c.getSharedPreferences(NAME, 0).getString("profileOneId", null); }
+    public static String profileTwoId(Context c) { return c.getSharedPreferences(NAME, 0).getString("profileTwoId", null); }
+    public static String playerOneName(Context c) { return c.getSharedPreferences(NAME, 0).getString("playerOneName", "PLAYER 1"); }
+    public static String playerTwoName(Context c) { return c.getSharedPreferences(NAME, 0).getString("playerTwoName", "PLAYER 2"); }
+
+    public static void savePlayers(Context c, String p1Id, String p2Id, String nameOne, String nameTwo) {
+        c.getSharedPreferences(NAME, 0).edit()
+            .putString("profileOneId", p1Id)
+            .putString("profileTwoId", p2Id)
+            .putString("playerOneName", nameOne)
+            .putString("playerTwoName", nameTwo)
+            .apply();
+    }
 
     public static void save(Context c, boolean dark, int one, int two, int remoteOne, int remoteTwo) {
         c.getSharedPreferences(NAME, 0).edit()

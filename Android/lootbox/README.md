@@ -1,11 +1,26 @@
-# Lootbox module
+# Lootbox Module (`Android/lootbox/`)
 
-This Android library contains the placeholder lootbox screen and its drop logic. The host app only includes `:lootbox`, registers `LootboxActivity`, and opens it from `UiTheme` navigation. Other app features do not depend on lootbox internals.
+This Android library provides the cosmetic squash lootbox screen, drop logic (25 player colors and 15 bundled SIL OFL Google Fonts), process-wide `RewardFonts` cache, reward inventory, and the AES-256-GCM encrypted storage engine (`SecureStorageEngine`).
 
-`LootTier` lists tiers in rarest-first order with absolute percentage weights. `TierRoller` checks each tier in that order. The conditional chance for a tier is `tier.weight / sum(weights of remaining tiers)`, so the final distribution stays 1% gold, 4% purple, 25% green, 70% gray. To add a tier, insert it into `LootTier` and adjust weights to total 100. The reel's filler squares are only decoration; the selected result is rolled once before animation and placed at the reel's stopping point.
+---
 
-The ball shakes for one second, cracks into two jagged halves over 1.2 seconds, and the reel appears in the same centered stage. The reel travels quickly for 1.5 seconds, slows for 3 seconds, then moves very slowly for the final 2 seconds. A smooth speed curve joins those sections and ends at zero speed. The stop point varies inside the winning square, with a margin from its edges. A centered reward card celebrates the result; Continue returns to a fresh ball. The landscape layout fits without scrolling. With Android's animation scale set to zero, the result appears immediately. This is a local visual prototype: no inventory, persistence, payments, or server-side rewards are included.
+## 1. Roll Logic and Timing
 
-The reel starts with a randomized set of squares already visible on both sides of the marker. Filler squares repeat as a visual loop, while the chosen prize remains fixed at the stopping point. The host app opens the prototype from the Players and statistics screen; the four-item bottom navigation stays unchanged.
+* `LootTier` lists tiers in rarest-first order with absolute percentage weights totaling 100 (`1%` Gold, `4%` Purple, `25%` Green, `70%` Gray).
+* `TierRoller` evaluates tiers in rarest-first order with conditional probability `tier.weight / sum(remainingWeights)`.
+* `LootboxAuthoritativeService` uses `SecureRandom` to roll rewards and issues single-use HMAC-SHA256 signed tickets bound to the active player profile ID.
+* `RewardInventory` redeems signed tickets and persists unlocked reward IDs per profile through `SecureStorageEngine` (AES-256-GCM backed by AndroidKeyStore).
+* During animation:
+  1. The squash ball shakes for 1.0 s and cracks into 2 halves over 1.2 s.
+  2. The horizontal reel travels fast for 1.5 s, slows over 3.0 s, and creeps for 2.0 s to a stop inside the winning square.
+  3. If system animations are disabled (`isReduceMotionEnabled`), the result card displays immediately.
 
-Run `:lootbox:testDebugUnitTest` for roll tests and `:app:assembleDebug` for the integrated app.
+---
+
+## 2. Build and Test
+
+```bash
+gradle -p Android -Dorg.gradle.java.home=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home :lootbox:testDebugUnitTest
+```
+
+See [AGENTS.md](AGENTS.md) and [REWARDS.md](REWARDS.md) for catalog and security rules.

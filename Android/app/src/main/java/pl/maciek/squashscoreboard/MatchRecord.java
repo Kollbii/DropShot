@@ -1,62 +1,361 @@
 package pl.maciek.squashscoreboard;
 
-import org.json.*;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
+/**
+ * [MASVS-CODE] [ASVS V4.2 / V5.1]
+ * Immutable, schema-validated match record entity with O(1) precomputed point-state lookup.
+ * - Bounds-checks all rule parameters (`pointsToWinSet >= 1`, `setsToWinMatch >= 1`) to prevent
+ *   division-by-zero or infinite loops when rendering charts from untrusted JSON / Intent extras.
+ * - Caps point history arrays (`MAX_RECORDED_POINTS = 5000`) to prevent OOM/DoS attacks.
+ * - Precomputes cumulative game/point scores and per-rally server/box metadata in a single O(N) pass.
+ */
 public final class MatchRecord {
     public final long id, finishedAt, durationMs;
     public final String playerOneName, playerTwoName, playerOneProfileId, playerTwoProfileId;
     public final int playerOneSets, playerTwoSets, playerOnePoints, playerTwoPoints, pointsToWinSet, setsToWinMatch, playerOneColor, playerTwoColor;
+    public final int initialServer;
     public final boolean finished, paused;
     public final ArrayList<Integer> pointWinners;
+    /** Normalized 'R'/'L' service box string for every point in pointWinners. */
+    public final String pointSides;
     /** Elapsed active match time at every scored point; old records can have an empty list. */
     public final ArrayList<Long> pointTimesMs;
     public final ArrayList<Long> setDurationsMs;
 
-    public MatchRecord(long id,String p1,String p2,String p1Id,String p2Id,int s1,int s2,int p1Points,int p2Points,int points,int sets,boolean finished,long timestamp,List<Integer>winners,long duration,List<Long>setDurations,List<Long>pointTimes,boolean paused,int color1,int color2) {
-        this.id=id;playerOneName=p1;playerTwoName=p2;playerOneProfileId=p1Id;playerTwoProfileId=p2Id;playerOneSets=s1;playerTwoSets=s2;this.playerOnePoints=p1Points;this.playerTwoPoints=p2Points;pointsToWinSet=points;setsToWinMatch=sets;this.finished=finished;finishedAt=timestamp;pointWinners=new ArrayList<>(winners);durationMs=Math.max(0,duration);setDurationsMs=new ArrayList<>(setDurations);pointTimesMs=new ArrayList<>(pointTimes);this.paused=paused;
-        playerOneColor=color1;playerTwoColor=color2;
-    }
-    public MatchRecord(long id,String p1,String p2,String p1Id,String p2Id,int s1,int s2,int p1Points,int p2Points,int points,int sets,boolean finished,long timestamp,List<Integer>winners,long duration,List<Long>setDurations,List<Long>pointTimes,boolean paused) { this(id,p1,p2,p1Id,p2Id,s1,s2,p1Points,p2Points,points,sets,finished,timestamp,winners,duration,setDurations,pointTimes,paused,AppPreferences.BLUE,AppPreferences.RED); }
-    public MatchRecord(long id,String p1,String p2,String p1Id,String p2Id,int s1,int s2,int p1Points,int p2Points,int points,int sets,boolean finished,long timestamp,List<Integer>winners,long duration,List<Long>setDurations,boolean paused) { this(id,p1,p2,p1Id,p2Id,s1,s2,p1Points,p2Points,points,sets,finished,timestamp,winners,duration,setDurations,Collections.<Long>emptyList(),paused); }
-    /** Kept for source compatibility with old callers. */
-    public MatchRecord(long id,String p1,String p2,int s1,int s2,int p1Points,int p2Points,int points,int sets,boolean finished,long timestamp,List<Integer>winners) { this(id,p1,p2,null,null,s1,s2,p1Points,p2Points,points,sets,finished,timestamp,winners,0,Collections.<Long>emptyList(),false); }
-    /** Reconstruct completed sets so older early-ended records do not count invented sets. */
-    public int[] playedSets() {
-        if(pointWinners.isEmpty()) return new int[]{playerOneSets,playerTwoSets};
-        int[] sets={0,0};int a=0,b=0;
-        for(int winner:pointWinners) {
-            if(winner==1)a++;else if(winner==2)b++;
-            if(Math.max(a,b)>=pointsToWinSet&&Math.abs(a-b)>=2) { sets[a>b?0:1]++;a=0;b=0; }
-        }
-        return sets;
-    }
-    public int statisticalWinner() {
-        int[] sets=playedSets();
-        if(sets[0]!=sets[1]) return sets[0]>sets[1]?1:2;
-        if(playerOnePoints!=playerTwoPoints) return playerOnePoints>playerTwoPoints?1:2;
-        return 0;
-    }
-    public static final class PointScore {
-        public final int setNumber,setsOne,setsTwo,pointsOne,pointsTwo;
-        private PointScore(int number,int s1,int s2,int p1,int p2) {
-            setNumber=number;setsOne=s1;setsTwo=s2;pointsOne=p1;pointsTwo=p2;
-        }
-    }
-    /** Score immediately after the indexed point, including a just-completed set. */
-    public PointScore scoreAtPoint(int index) {
-        int s1=0,s2=0,p1=0,p2=0,setNumber=1;
-        boolean completed=false;
-        for(int i=0;i<=index&&i<pointWinners.size();i++) {
-            if(completed){p1=0;p2=0;setNumber++;completed=false;}
-            if(pointWinners.get(i)==1)p1++;else p2++;
-            if(Math.max(p1,p2)>=pointsToWinSet&&Math.abs(p1-p2)>=2) {
-                if(p1>p2)s1++;else s2++;
-                completed=true;
+    // Precomputed O(1) lookup tables
+    private final int computedSetsOne;
+    private final int computedSetsTwo;
+    private final short[] prefixPointsOne;
+    private final short[] prefixPointsTwo;
+    private final byte[] prefixSetsOne;
+    private final byte[] prefixSetsTwo;
+    private final byte[] prefixSetNumber;
+    // Bit 0: server (0 = P1, 1 = P2), Bit 1: side (0 = 'R', 1 = 'L'), Bit 2: sidePicked (1 = picked, 0 = alternating)
+    private final byte[] prefixServeMeta;
+
+    public MatchRecord(
+        long id,
+        String p1,
+        String p2,
+        String p1Id,
+        String p2Id,
+        int s1,
+        int s2,
+        int p1Points,
+        int p2Points,
+        int points,
+        int sets,
+        boolean finished,
+        long timestamp,
+        List<Integer> winners,
+        long duration,
+        List<Long> setDurations,
+        List<Long> pointTimes,
+        boolean paused,
+        int color1,
+        int color2,
+        int initialServer,
+        String rawSides
+    ) {
+        this.id = id > 0 ? id : InputValidator.generateSecureMatchId();
+        this.playerOneName = InputValidator.sanitizePlayerName(p1, "PLAYER 1");
+        this.playerTwoName = InputValidator.sanitizePlayerName(p2, "PLAYER 2");
+        this.playerOneProfileId = InputValidator.sanitizeProfileIdOrNull(p1Id);
+        this.playerTwoProfileId = InputValidator.sanitizeProfileIdOrNull(p2Id);
+        this.pointsToWinSet = InputValidator.clampPointsPerSet(points);
+        this.setsToWinMatch = InputValidator.clampSetsPerMatch(sets);
+        this.playerOneSets = InputValidator.clampNonNegativeScore(s1, 100);
+        this.playerTwoSets = InputValidator.clampNonNegativeScore(s2, 100);
+        this.playerOnePoints = InputValidator.clampNonNegativeScore(p1Points, 500);
+        this.playerTwoPoints = InputValidator.clampNonNegativeScore(p2Points, 500);
+        this.finished = finished;
+        this.finishedAt = timestamp > 0 ? timestamp : System.currentTimeMillis();
+        this.durationMs = InputValidator.clampDurationMs(duration);
+        this.paused = paused;
+        this.playerOneColor = color1;
+        this.playerTwoColor = color2;
+        this.initialServer = (initialServer == 2) ? 2 : 1;
+
+        this.pointWinners = new ArrayList<>();
+        if (winners != null) {
+            int limit = Math.min(winners.size(), InputValidator.MAX_RECORDED_POINTS);
+            for (int i = 0; i < limit; i++) {
+                Integer w = winners.get(i);
+                if (w != null && (w == 1 || w == 2)) {
+                    this.pointWinners.add(w);
+                }
             }
         }
-        return new PointScore(setNumber,s1,s2,p1,p2);
+
+        this.setDurationsMs = new ArrayList<>();
+        if (setDurations != null) {
+            int limit = Math.min(setDurations.size(), InputValidator.MAX_SETS_PER_MATCH * 4);
+            for (int i = 0; i < limit; i++) {
+                Long d = setDurations.get(i);
+                if (d != null) {
+                    this.setDurationsMs.add(InputValidator.clampDurationMs(d));
+                }
+            }
+        }
+
+        this.pointTimesMs = new ArrayList<>();
+        if (pointTimes != null) {
+            int limit = Math.min(pointTimes.size(), this.pointWinners.size());
+            for (int i = 0; i < limit; i++) {
+                Long t = pointTimes.get(i);
+                if (t != null) {
+                    this.pointTimesMs.add(InputValidator.clampDurationMs(t));
+                }
+            }
+        }
+
+        int n = this.pointWinners.size();
+        this.prefixPointsOne = new short[n];
+        this.prefixPointsTwo = new short[n];
+        this.prefixSetsOne = new byte[n];
+        this.prefixSetsTwo = new byte[n];
+        this.prefixSetNumber = new byte[n];
+        this.prefixServeMeta = new byte[n];
+
+        StringBuilder normalizedSides = new StringBuilder(n);
+        int curS1 = 0, curS2 = 0, curP1 = 0, curP2 = 0, curSetNum = 1;
+        int prevSrv = this.initialServer;
+        boolean completedSet = false;
+        boolean runningRightBox = true;
+
+        for (int i = 0; i < n; i++) {
+            int srv = (i == 0) ? this.initialServer : this.pointWinners.get(i - 1);
+            boolean picked = (i == 0) || completedSet || (srv != prevSrv);
+            if (completedSet) {
+                curP1 = 0;
+                curP2 = 0;
+                curSetNum++;
+                completedSet = false;
+            }
+            char sideChar = 0;
+            if (rawSides != null && i < rawSides.length()) {
+                char candidate = rawSides.charAt(i);
+                if (candidate == 'R' || candidate == 'L') {
+                    sideChar = candidate;
+                }
+            }
+            if (sideChar == 'R' || sideChar == 'L') {
+                runningRightBox = (sideChar == 'R');
+            } else {
+                if (picked) {
+                    runningRightBox = true;
+                } else {
+                    runningRightBox = !runningRightBox;
+                }
+                sideChar = runningRightBox ? 'R' : 'L';
+            }
+            normalizedSides.append(sideChar);
+
+            int winner = this.pointWinners.get(i);
+            if (winner == 1) curP1++; else curP2++;
+            if (Math.max(curP1, curP2) >= this.pointsToWinSet && Math.abs(curP1 - curP2) >= 2) {
+                if (curP1 > curP2) curS1++; else curS2++;
+                completedSet = true;
+            }
+
+            this.prefixPointsOne[i] = (short) curP1;
+            this.prefixPointsTwo[i] = (short) curP2;
+            this.prefixSetsOne[i] = (byte) Math.min(127, curS1);
+            this.prefixSetsTwo[i] = (byte) Math.min(127, curS2);
+            this.prefixSetNumber[i] = (byte) Math.min(127, curSetNum);
+            int meta = (srv == 2 ? 1 : 0)
+                | (sideChar == 'L' ? 2 : 0)
+                | (picked ? 4 : 0);
+            this.prefixServeMeta[i] = (byte) meta;
+            prevSrv = srv;
+        }
+
+        this.pointSides = normalizedSides.toString();
+        if (n == 0) {
+            this.computedSetsOne = this.playerOneSets;
+            this.computedSetsTwo = this.playerTwoSets;
+        } else {
+            this.computedSetsOne = curS1;
+            this.computedSetsTwo = curS2;
+        }
     }
-    public JSONObject toJson() throws JSONException { JSONObject j=new JSONObject(); j.put("id",id);j.put("p1",playerOneName);j.put("p2",playerTwoName);if(playerOneProfileId!=null)j.put("p1profile",playerOneProfileId);if(playerTwoProfileId!=null)j.put("p2profile",playerTwoProfileId);j.put("color1",playerOneColor);j.put("color2",playerTwoColor);j.put("s1",playerOneSets);j.put("s2",playerTwoSets);j.put("time",finishedAt);j.put("p1points",playerOnePoints);j.put("p2points",playerTwoPoints);j.put("pointsPerSet",pointsToWinSet);j.put("setsPerMatch",setsToWinMatch);j.put("finished",finished);j.put("duration",durationMs);j.put("paused",paused);JSONArray a=new JSONArray();for(int p:pointWinners)a.put(p);j.put("points",a);JSONArray d=new JSONArray();for(long v:setDurationsMs)d.put(v);j.put("setDurations",d);JSONArray pt=new JSONArray();for(long v:pointTimesMs)pt.put(v);j.put("pointTimes",pt);return j; }
-    public static MatchRecord fromJson(JSONObject j) throws JSONException { ArrayList<Integer>w=new ArrayList<>();JSONArray a=j.optJSONArray("points");if(a!=null)for(int i=0;i<a.length();i++)w.add(a.optInt(i));ArrayList<Long>d=new ArrayList<>();JSONArray sd=j.optJSONArray("setDurations");if(sd!=null)for(int i=0;i<sd.length();i++)d.add(Math.max(0,sd.optLong(i)));ArrayList<Long>pt=new ArrayList<>();JSONArray times=j.optJSONArray("pointTimes");if(times!=null)for(int i=0;i<times.length();i++)pt.add(Math.max(0,times.optLong(i)));long time=j.optLong("time",System.currentTimeMillis());return new MatchRecord(j.optLong("id",time),j.optString("p1","GRACZ 1"),j.optString("p2","GRACZ 2"),j.optString("p1profile",null),j.optString("p2profile",null),j.optInt("s1"),j.optInt("s2"),j.optInt("p1points"),j.optInt("p2points"),j.optInt("pointsPerSet",11),j.optInt("setsPerMatch",3),j.optBoolean("finished"),time,w,j.optLong("duration",0),d,pt,j.optBoolean("paused",false),j.optInt("color1",AppPreferences.BLUE),j.optInt("color2",AppPreferences.RED)); }
+
+    public MatchRecord(long id, String p1, String p2, String p1Id, String p2Id, int s1, int s2, int p1Points, int p2Points, int points, int sets, boolean finished, long timestamp, List<Integer> winners, long duration, List<Long> setDurations, List<Long> pointTimes, boolean paused, int color1, int color2) {
+        this(id, p1, p2, p1Id, p2Id, s1, s2, p1Points, p2Points, points, sets, finished, timestamp, winners, duration, setDurations, pointTimes, paused, color1, color2, 1, null);
+    }
+
+    public MatchRecord(long id, String p1, String p2, String p1Id, String p2Id, int s1, int s2, int p1Points, int p2Points, int points, int sets, boolean finished, long timestamp, List<Integer> winners, long duration, List<Long> setDurations, List<Long> pointTimes, boolean paused) {
+        this(id, p1, p2, p1Id, p2Id, s1, s2, p1Points, p2Points, points, sets, finished, timestamp, winners, duration, setDurations, pointTimes, paused, AppPreferences.BLUE, AppPreferences.RED, 1, null);
+    }
+
+    public MatchRecord(long id, String p1, String p2, String p1Id, String p2Id, int s1, int s2, int p1Points, int p2Points, int points, int sets, boolean finished, long timestamp, List<Integer> winners, long duration, List<Long> setDurations, boolean paused) {
+        this(id, p1, p2, p1Id, p2Id, s1, s2, p1Points, p2Points, points, sets, finished, timestamp, winners, duration, setDurations, Collections.<Long>emptyList(), paused);
+    }
+
+    /** Kept for source compatibility with old callers. */
+    public MatchRecord(long id, String p1, String p2, int s1, int s2, int p1Points, int p2Points, int points, int sets, boolean finished, long timestamp, List<Integer> winners) {
+        this(id, p1, p2, null, null, s1, s2, p1Points, p2Points, points, sets, finished, timestamp, winners, 0, Collections.<Long>emptyList(), false);
+    }
+
+    /** O(1) lookup of completed sets so older early-ended records do not count invented sets. */
+    public int[] playedSets() {
+        return new int[]{computedSetsOne, computedSetsTwo};
+    }
+
+    public int statisticalWinner() {
+        if (computedSetsOne != computedSetsTwo) return computedSetsOne > computedSetsTwo ? 1 : 2;
+        if (playerOnePoints != playerTwoPoints) return playerOnePoints > playerTwoPoints ? 1 : 2;
+        return 0;
+    }
+
+    public static final class PointScore {
+        public final int setNumber, setsOne, setsTwo, pointsOne, pointsTwo;
+        public final int server;
+        public final char serviceSide;
+        public final boolean sidePicked;
+
+        private PointScore(int number, int s1, int s2, int p1, int p2, int srv, char side, boolean picked) {
+            setNumber = number;
+            setsOne = s1;
+            setsTwo = s2;
+            pointsOne = p1;
+            pointsTwo = p2;
+            server = srv;
+            serviceSide = side;
+            sidePicked = picked;
+        }
+    }
+
+    /** O(1) lookup of the score and serve metadata at the indexed point. */
+    public PointScore scoreAtPoint(int index) {
+        int n = pointWinners.size();
+        if (n == 0 || index < 0) {
+            return new PointScore(1, 0, 0, 0, 0, initialServer, 'R', true);
+        }
+        int clamped = Math.min(index, n - 1);
+        int meta = prefixServeMeta[clamped] & 0xFF;
+        int srv = (meta & 1) != 0 ? 2 : 1;
+        char side = (meta & 2) != 0 ? 'L' : 'R';
+        boolean picked = (meta & 4) != 0;
+        return new PointScore(
+            prefixSetNumber[clamped] & 0xFF,
+            prefixSetsOne[clamped] & 0xFF,
+            prefixSetsTwo[clamped] & 0xFF,
+            prefixPointsOne[clamped],
+            prefixPointsTwo[clamped],
+            srv,
+            side,
+            picked
+        );
+    }
+
+    /** O(1) lookup of who served at the indexed point (1 or 2). */
+    public int serverAtPoint(int index) {
+        if (index <= 0 || index >= prefixServeMeta.length) return initialServer;
+        return (prefixServeMeta[index] & 1) != 0 ? 2 : 1;
+    }
+
+    /** O(1) lookup of which box ('R' or 'L') was served from at the indexed point. */
+    public char sideAtPoint(int index) {
+        if (index < 0 || index >= prefixServeMeta.length) return 'R';
+        return (prefixServeMeta[index] & 2) != 0 ? 'L' : 'R';
+    }
+
+    /** O(1) lookup of whether the server could freely pick the side at the indexed point. */
+    public boolean isSidePickedAtPoint(int index) {
+        if (index < 0 || index >= prefixServeMeta.length) return true;
+        return (prefixServeMeta[index] & 4) != 0;
+    }
+
+    public JSONObject toJson() throws JSONException {
+        JSONObject j = new JSONObject();
+        j.put("id", id);
+        j.put("p1", playerOneName);
+        j.put("p2", playerTwoName);
+        if (playerOneProfileId != null) j.put("p1profile", playerOneProfileId);
+        if (playerTwoProfileId != null) j.put("p2profile", playerTwoProfileId);
+        j.put("color1", playerOneColor);
+        j.put("color2", playerTwoColor);
+        j.put("s1", playerOneSets);
+        j.put("s2", playerTwoSets);
+        j.put("time", finishedAt);
+        j.put("p1points", playerOnePoints);
+        j.put("p2points", playerTwoPoints);
+        j.put("pointsPerSet", pointsToWinSet);
+        j.put("setsPerMatch", setsToWinMatch);
+        j.put("finished", finished);
+        j.put("duration", durationMs);
+        j.put("paused", paused);
+        j.put("initSrv", initialServer);
+        if (!pointSides.isEmpty()) {
+            j.put("sides", pointSides);
+        }
+        JSONArray a = new JSONArray();
+        for (int p : pointWinners) a.put(p);
+        j.put("points", a);
+        JSONArray d = new JSONArray();
+        for (long v : setDurationsMs) d.put(v);
+        j.put("setDurations", d);
+        JSONArray pt = new JSONArray();
+        for (long v : pointTimesMs) pt.put(v);
+        j.put("pointTimes", pt);
+        return j;
+    }
+
+    public static MatchRecord fromJson(JSONObject j) throws JSONException {
+        if (j == null) throw new JSONException("Null MatchRecord JSON");
+        ArrayList<Integer> w = new ArrayList<>();
+        JSONArray a = j.optJSONArray("points");
+        if (a != null) {
+            int limit = Math.min(a.length(), InputValidator.MAX_RECORDED_POINTS);
+            for (int i = 0; i < limit; i++) {
+                int val = a.optInt(i, 0);
+                if (val == 1 || val == 2) w.add(val);
+            }
+        }
+        ArrayList<Long> d = new ArrayList<>();
+        JSONArray sd = j.optJSONArray("setDurations");
+        if (sd != null) {
+            int limit = Math.min(sd.length(), InputValidator.MAX_SETS_PER_MATCH * 4);
+            for (int i = 0; i < limit; i++) d.add(InputValidator.clampDurationMs(sd.optLong(i)));
+        }
+        ArrayList<Long> pt = new ArrayList<>();
+        JSONArray times = j.optJSONArray("pointTimes");
+        if (times != null) {
+            int limit = Math.min(times.length(), w.size());
+            for (int i = 0; i < limit; i++) pt.add(InputValidator.clampDurationMs(times.optLong(i)));
+        }
+        long time = j.optLong("time", System.currentTimeMillis());
+        long rawId = j.optLong("id", 0L);
+        return new MatchRecord(
+            rawId > 0 ? rawId : InputValidator.generateSecureMatchId(),
+            j.optString("p1", "PLAYER 1"),
+            j.optString("p2", "PLAYER 2"),
+            j.optString("p1profile", null),
+            j.optString("p2profile", null),
+            j.optInt("s1", 0),
+            j.optInt("s2", 0),
+            j.optInt("p1points", 0),
+            j.optInt("p2points", 0),
+            j.optInt("pointsPerSet", 11),
+            j.optInt("setsPerMatch", 3),
+            j.optBoolean("finished", false),
+            time,
+            w,
+            j.optLong("duration", 0),
+            d,
+            pt,
+            j.optBoolean("paused", false),
+            j.optInt("color1", AppPreferences.BLUE),
+            j.optInt("color2", AppPreferences.RED),
+            j.optInt("initSrv", 1),
+            j.optString("sides", null)
+        );
+    }
 }
