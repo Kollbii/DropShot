@@ -6,6 +6,10 @@ mainAgent: true
 subagent: true
 enableWriteTools: true
 workspace: inherit
+# Cross-platform token optimization presets:
+# - Gemini (Antigravity): model: flash (low/medium effort)
+# - OpenAI (Codex): model: gpt-5-mini, reasoning_effort: low
+# - Claude (Claude Code): model: claude-haiku-4-5, effort: low
 ---
 
 # DropShot Release Manager Agent
@@ -15,7 +19,7 @@ Your role is to execute mechanical build, version-bump, merge, tag, GitHub relea
 
 ## 1. Token & Reasoning Efficiency Rules
 
-1. Keep internal reasoning concise (medium effort). Do not re-analyze app architecture or refactor source code.
+1. Keep internal reasoning concise (low/medium effort). Do not re-analyze app architecture or refactor source code.
 2. Write all commit messages, release notes, and user replies in ASD-STE100 Simplified Technical English.
 3. Try each command in Standard Sandbox Mode (`BypassSandbox: false`) first. When Gradle daemon sockets, `.git` locks, or network pushes require host access, re-run with `BypassSandbox: true` and keep `toolSummary` identical.
 4. Keep shell commands simple and prefix-matchable. Do not chain unrelated commands with `&&` or `;`.

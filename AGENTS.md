@@ -41,8 +41,15 @@ DropShot/
 │   ├── ste-writing.md         ← ASD-STE100 rules for all text
 │   ├── ui-ux.md               ← Material Design 3, WCAG 2.2 AA, UI text
 │   └── watch-ecosystem.md     ← Zepp OS and AndroidWatch companions, protocol
-├── .agents/                   ← Antigravity workspace agents and skills
-│   ├── agents/release-manager.md ← Gemini Flash release automation agent (merge, tag, build, release, cleanup)
+├── .agents/                   ← Antigravity / Codex / Claude workspace agents and skills
+│   ├── agents/                ← module-scoped agents for token optimization (see .agents/agents/README.md)
+│   │   ├── README.md          ← cross-platform routing & token guide (Gemini, OpenAI, Claude)
+│   │   ├── android-app.md     ← Android/app scoreboard, stats, stores, and M3 UI agent
+│   │   ├── lootbox-cosmetics.md ← Android/lootbox colors, bundled fonts, and AES-GCM agent
+│   │   ├── supabase-cloud.md  ← supabase/ SQL schema, RLS, and SupabaseSyncClient agent
+│   │   ├── watch-companion.md ← AndroidWatch RFCOMM and ZeppOS watch remote agent
+│   │   ├── docs-and-ste-auditor.md ← ASD-STE100 documentation & compliance auditor agent
+│   │   └── release-manager.md ← Gemini Flash release automation agent (merge, tag, build, release, cleanup)
 │   └── skills/                ← step-by-step procedures for agents
 ├── Android/
 │   ├── AGENTS.md              ← Android rules
@@ -63,6 +70,24 @@ DropShot/
 │   └── src/                   ← standalone Wear OS / LG G Watch app and unit tests
 └── ZeppOS/                    ← Amazfit watch apps (has its own AGENTS.md)
 ```
+
+### 2.1 Module-scoped agents & token optimization (Gemini, OpenAI, Claude)
+
+Use the specialized agents in [`.agents/agents/`](.agents/agents/README.md) to isolate context windows and minimize token usage:
+
+| Agent | Scope | Gemini | OpenAI | Claude |
+|---|---|---|---|---|
+| [`android-app`](.agents/agents/android-app.md) | `Android/app/` (Scoreboard, stats, stores, UI) | `flash` *(or `pro`)* | `gpt-5-mini` (`medium`) | `claude-sonnet-4-5` (`medium`) |
+| [`lootbox-cosmetics`](.agents/agents/lootbox-cosmetics.md) | `Android/lootbox/`, fonts, `PlayerCustomizationActivity` | `flash` (`low`) | `gpt-5-mini` (`low`) | `claude-haiku-4-5` (`low`) |
+| [`supabase-cloud`](.agents/agents/supabase-cloud.md) | `supabase/`, `SupabaseSyncClient`, `CloudConfigStore` | `flash` (`medium`) | `gpt-5-mini` (`medium`) | `claude-haiku-4-5` (`medium`) |
+| [`watch-companion`](.agents/agents/watch-companion.md) | `AndroidWatch/`, `ZeppOS/`, watch bridges | `flash` (`low`) | `gpt-5-mini` (`low`) | `claude-haiku-4-5` (`low`) |
+| [`docs-and-ste-auditor`](.agents/agents/docs-and-ste-auditor.md) | `README.md`, `AGENTS.md`, `docs/agents/` | `flash` / `flash_lite` | `gpt-5-mini` (`low`) | `claude-haiku-4-5` (`low`) |
+| [`release-manager`](.agents/agents/release-manager.md) | Version bump, APK builds, merge, tag, release, cleanup | `flash` (`low`) | `gpt-5-mini` (`low`) | `claude-haiku-4-5` (`low`) |
+
+Token-saving rules for all agents:
+1. Read only the `AGENTS.md` and source files inside your target module. Do not read unrelated modules.
+2. Do not read `MainActivity.java` (1,330+ lines) in full. Locate methods with `grep -n` and read 80–120 lines (`StartLine`/`EndLine`).
+3. Run module-scoped Gradle unit test tasks (`:app:testDebugUnitTest`, `:lootbox:testDebugUnitTest`, or `-p AndroidWatch testDebugUnitTest`) during iteration.
 
 ## 3. Commands
 
