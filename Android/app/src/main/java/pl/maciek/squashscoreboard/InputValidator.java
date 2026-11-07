@@ -18,6 +18,7 @@ public final class InputValidator {
     public static final long MAX_MATCH_DURATION_MS = 24L * 60L * 60L * 1000L; // 24 hours
 
     private static final Pattern SAFE_PROFILE_ID = Pattern.compile("^[a-zA-Z0-9_-]{1,64}$");
+    private static final Pattern SAFE_COSMETIC_ID = Pattern.compile("^[a-z0-9_-]{1,64}$");
     private static final Pattern CONTROL_AND_BIDI = Pattern.compile("[\\p{Cntrl}\\u202A-\\u202E\\u2066-\\u2069]");
     private static final SecureRandom CSPRNG = new SecureRandom();
 
@@ -47,6 +48,19 @@ public final class InputValidator {
 
     public static String sanitizeProfileIdOrNull(String id) {
         return isValidProfileId(id) ? id : null;
+    }
+
+    /**
+     * Normalizes an equipped cosmetic identifier (for example, `font-anton`) or returns `null`
+     * when default, blank, or malformed.
+     */
+    public static String sanitizeCosmeticIdOrNull(String raw) {
+        if (raw == null) return null;
+        String clean = raw.trim().toLowerCase(Locale.US);
+        if (clean.isEmpty() || "null".equals(clean) || "font-default".equals(clean)) {
+            return null;
+        }
+        return SAFE_COSMETIC_ID.matcher(clean).matches() ? clean : null;
     }
 
     /**

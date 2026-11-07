@@ -23,7 +23,7 @@ After the match, players can review their history, charts, and statistics.
 | **Track the court rental time** | Start the court timer on the Match screen. The border changes color and vibrates at 30 min, 15 min, and 5 min. |
 | **Review past matches and charts** | Open the History screen to see finished matches, timelines, and game progress charts. |
 | **Compare 2 players** | Open the Players screen to see career win rates, averages, head-to-head records, and `6-7` / `6-9` counts. |
-| **Customize and sync player colors** | Roll the squash lootbox to unlock solid, gradient, and animated colors. Sync rewards with the cloud. |
+| **Customize and sync player cosmetics** | Roll the squash lootbox to unlock solid, gradient, and animated colors plus 15 bundled player name fonts. Sync cosmetics and stats with Supabase. |
 
 ---
 
@@ -72,8 +72,9 @@ Tap the `⌃` button at the bottom of the screen to open the navigation bar.
 | **View match charts and stats** | History → Match detail | Tap any match row in the **History** list. |
 | **Add a player profile** | Players | Open **Players** and tap **Add player**. |
 | **Compare 2 players** | Players | Open **Players** and tap **Compare players**. |
-| **Unlock new player colors** | Players → Lootbox | Open **Players** and tap **Open lootbox prototype**. |
-| **Sync cosmetics to cloud** | Players | Open **Players** and tap **Sync cloud**. |
+| **Customize colors & fonts** | Players → Edit player | Open a player profile and tap **Edit player** to preview and equip unlocked colors and player name fonts. |
+| **Unlock colors & fonts** | Players → Lootbox | Open **Players** and tap **Open lootbox prototype**. |
+| **Sync cosmetics & stats to cloud** | Players | Open **Players** and tap **Set up cloud** or **Link cloud** (database setup in [`supabase/schema.sql`](supabase/schema.sql)). |
 
 ---
 
@@ -145,8 +146,9 @@ The `ZeppOS/` directory provides 2 watch apps:
 ### 4.6 Player profiles, statistics, and cosmetics
 
 - Tracks career matches, wins, win rates, Bayesian Laplace win probability, Wilson 95% lower-bound rating, Serve Hold Rate, Side-Out Rate, Markov steady-state serve share, `[R]` / `[L]` side pick preferences & win rates, averages, and special score counts (`6-7` / `6-9`).
-- Unlock extra colors through the squash lootbox: Green, Gray, Purple gradients, and Living Rainbow.
-- Tap **Sync cloud** in the Players screen to sync unlocked cosmetics through Supabase.
+- Unlock extra cosmetics through the squash lootbox: 25 colors (starter, Gray, Green, Purple gradients, and Living Rainbow) and 15 bundled Google Fonts for player names.
+- Equip unlocked colors and fonts with a live scoreboard preview in **Players → Player profile → Edit player**.
+- Sync profiles, equipped cosmetics, unlocked rewards, extended statistics, and match history through Supabase. See [`supabase/README.md`](supabase/README.md) and [`supabase/schema.sql`](supabase/schema.sql) for the universal database setup.
 
 ---
 

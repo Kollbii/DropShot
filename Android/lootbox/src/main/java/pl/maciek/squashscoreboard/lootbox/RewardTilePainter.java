@@ -1,5 +1,6 @@
 package pl.maciek.squashscoreboard.lootbox;
 
+import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
@@ -7,6 +8,7 @@ import android.graphics.Path;
 import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.view.View;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -14,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * [PERF-120HZ] Shared tier tile art for the roulette and player collection.
  * Zero per-frame object allocations inside `draw()`:
  * - `CONDENSED_BOLD` Typeface and `FLOW_PATH` geometry are pre-allocated once.
- * - Static multi-color `LinearGradient` shaders are cached by reward ID.
+ * - Static multi-color `LinearGradient` shaders and font tile glyph sizes are cached by reward ID.
  */
 public final class RewardTilePainter {
     private static final Typeface CONDENSED_BOLD = Typeface.create("sans-serif-condensed", Typeface.BOLD);
@@ -51,7 +53,19 @@ public final class RewardTilePainter {
         paint.setTextAlign(Paint.Align.CENTER);
         paint.setTypeface(CONDENSED_BOLD);
         paint.setTextSize(10);
-        canvas.drawText(reward.tier.label.toUpperCase(), 36, 12, paint);
+        canvas.drawText(reward.tier.label.toUpperCase(Locale.US), 36, 12, paint);
+
+        if (reward.kind == RewardCatalog.Kind.FONT) {
+            Context context = host != null ? host.getContext() : null;
+            paint.setColor(0xFF18202B);
+            paint.setTypeface(RewardFonts.forReward(context, reward));
+            paint.setTextSize(RewardFonts.tileGlyphSize(context, reward));
+            canvas.drawText("Aa", 36, 55, paint);
+            paint.setTypeface(null);
+            paint.setTextAlign(Paint.Align.LEFT);
+            canvas.restoreToCount(save);
+            return;
+        }
 
         if (reward.colors.length > 1) {
             paint.setShader(shaderFor(reward));

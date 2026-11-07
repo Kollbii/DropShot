@@ -11,6 +11,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import java.util.Locale;
+import pl.maciek.squashscoreboard.lootbox.RewardFonts;
 
 public class PlayerComparisonActivity extends Activity {
     private PlayerProfile one, two;
@@ -153,12 +154,14 @@ public class PlayerComparisonActivity extends Activity {
         row.setBackground(theme.roundedBox(theme.surfaceHigh, 10, 1, theme.outlineVariant, this));
 
         TextView first = cell(one.name, 18, c1, true);
+        RewardFonts.apply(first, one.fontId, 18f);
         first.setSingleLine(true);
         first.setEllipsize(TextUtils.TruncateAt.END);
 
         TextView middle = cell("Metric", 16, theme.onSurfaceVariant, true);
 
         TextView second = cell(two.name, 18, c2, true);
+        RewardFonts.apply(second, two.fontId, 18f);
         second.setSingleLine(true);
         second.setEllipsize(TextUtils.TruncateAt.END);
 

@@ -5,20 +5,30 @@ import org.json.JSONObject;
 
 /**
  * [ASVS V4.2] [MASVS-CODE]
- * Immutable player entity with a non-enumerable UUIDv4 identifier and sanitized display name.
+ * Immutable player entity with a non-enumerable UUIDv4 identifier, sanitized display name,
+ * and equipped cosmetic color and font identifiers.
  */
 public final class PlayerProfile {
-    public final String id, name;
+    public final String id;
+    public final String name;
     public final int color;
+    public final String fontId;
 
     public PlayerProfile(String name, int color) {
-        this(InputValidator.generateProfileUuid(), name, color);
+        this(InputValidator.generateProfileUuid(), name, color, null);
     }
 
     public PlayerProfile(String id, String name, int color) {
-        this.id = InputValidator.isValidProfileId(id) ? id : InputValidator.generateProfileUuid();
+        this(id, name, color, null);
+    }
+
+    public PlayerProfile(String id, String name, int color, String fontId) {
+        this.id = InputValidator.isValidProfileId(id) && !"developer-profile".equals(id)
+            ? id
+            : InputValidator.generateProfileUuid();
         this.name = InputValidator.sanitizePlayerName(name, "Player");
         this.color = color;
+        this.fontId = InputValidator.sanitizeCosmeticIdOrNull(fontId);
     }
 
     JSONObject json() throws JSONException {
@@ -26,6 +36,9 @@ public final class PlayerProfile {
         o.put("id", id);
         o.put("name", name);
         o.put("color", color);
+        if (fontId != null) {
+            o.put("font", fontId);
+        }
         return o;
     }
 
@@ -36,6 +49,7 @@ public final class PlayerProfile {
         String validId = (InputValidator.isValidProfileId(rawId) && !"developer-profile".equals(rawId))
             ? rawId
             : InputValidator.generateProfileUuid();
-        return new PlayerProfile(validId, name, o.optInt("color", AppPreferences.BLUE));
+        String rawFont = o.has("font") && !o.isNull("font") ? o.optString("font", null) : null;
+        return new PlayerProfile(validId, name, o.optInt("color", AppPreferences.BLUE), rawFont);
     }
 }

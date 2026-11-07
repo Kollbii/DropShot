@@ -6,37 +6,66 @@ import android.provider.Settings;
 import android.view.View;
 import android.view.animation.LinearInterpolator;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Random;
 
 /**
  * [MASVS-CODE] [PERF-120HZ]
- * Single, versioned reward database with lifecycle-safe animation binding and defensive copies.
- * Uses primitive ARGB channel interpolation instead of `ArgbEvaluator` to eliminate per-frame
- * Integer autoboxing (21 boxed Integers/frame removed).
+ * Single, versioned reward catalog for colors and bundled fonts.
+ * - Precomputes O(1) lookup tables by ID, color key, kind, and tier at class initialization
+ *   so 50-slot reel generation and 120 Hz rendering perform zero list allocations.
+ * - Uses primitive ARGB channel interpolation and view-bound animator cancellation.
  */
 public final class RewardCatalog {
     private static final int ANIMATOR_TAG_KEY = 0x7f0b00f1;
+    private static final int[] EMPTY_COLORS = new int[0];
+
+    public enum Kind { COLOR, FONT }
 
     public static final class Reward {
         public final String id, name;
         public final LootTier tier;
+        public final Kind kind;
         public final int[] colors;
         public final boolean animated;
+        public final String fontFile;
 
         private Reward(String id, String name, LootTier tier, boolean animated, int... colors) {
             this.id = id;
             this.name = name;
             this.tier = tier;
+            this.kind = Kind.COLOR;
             this.colors = colors.clone();
             this.animated = animated;
+            this.fontFile = null;
+        }
+
+        private Reward(String id, String name, LootTier tier, String fontFile) {
+            this.id = id;
+            this.name = name;
+            this.tier = tier;
+            this.kind = Kind.FONT;
+            this.colors = EMPTY_COLORS;
+            this.animated = false;
+            this.fontFile = fontFile;
         }
 
         /** Persisted player color key; the first gradient stop is deliberately unique. */
-        public int key() { return colors[0]; }
+        public int key() {
+            if (kind != Kind.COLOR) {
+                throw new IllegalStateException("Font reward has no color key: " + id);
+            }
+            return colors[0];
+        }
 
         /** Defensive copy of color stops to prevent external array mutation. */
-        public int[] colorsCopy() { return colors.clone(); }
+        public int[] colorsCopy() {
+            return colors.length == 0 ? EMPTY_COLORS : colors.clone();
+        }
     }
 
     private static Reward solid(String id, String name, LootTier tier, int color) {
@@ -47,7 +76,13 @@ public final class RewardCatalog {
         return new Reward(id, name, tier, false, colors);
     }
 
-    // Keep existing four color keys for profiles, saved matches and preferences.
+    private static Reward font(String id, String name, LootTier tier, String file) {
+        return new Reward(id, name, tier, file);
+    }
+
+    private static final Reward DEFAULT_FONT = font("font-default", "Default", LootTier.GRAY, null);
+
+    // Keep existing 4 starter color keys stable for profiles, saved matches, and preferences.
     private static final Reward[] ENTRIES = {
         solid("blue", "Blue", LootTier.GRAY, 0xFF3184FF),
         solid("red", "Red", LootTier.GRAY, 0xFFF45C5C),
@@ -74,39 +109,119 @@ public final class RewardCatalog {
         gradient("orchid", "Orchid", LootTier.PURPLE, 0xFF9C55C2, 0xFFDA72B5, 0xFFF4A887),
         gradient("ember", "Ember", LootTier.PURPLE, 0xFFC64648, 0xFFF0924F, 0xFFFFD476),
         new Reward("rainbow", "Living Rainbow", LootTier.GOLD, true,
-            0xFFFF5059, 0xFFFFA838, 0xFFF4DE4A, 0xFF57CE87, 0xFF48A9EF, 0xFF9B6AE8, 0xFFFF5059)
+            0xFFFF5059, 0xFFFFA838, 0xFFF4DE4A, 0xFF57CE87, 0xFF48A9EF, 0xFF9B6AE8, 0xFFFF5059),
+        font("font-rajdhani", "Rajdhani", LootTier.GRAY, "rajdhani.ttf"),
+        font("font-oxanium", "Oxanium", LootTier.GRAY, "oxanium.ttf"),
+        font("font-chakra-petch", "Chakra Petch", LootTier.GRAY, "chakrapetch.ttf"),
+        font("font-teko", "Teko", LootTier.GRAY, "teko.ttf"),
+        font("font-barlow-condensed", "Barlow Condensed", LootTier.GRAY, "barlowcondensed.ttf"),
+        font("font-exo-2", "Exo 2", LootTier.GRAY, "exo2.ttf"),
+        font("font-russo-one", "Russo One", LootTier.GRAY, "russoone.ttf"),
+        font("font-audiowide", "Audiowide", LootTier.GRAY, "audiowide.ttf"),
+        font("font-righteous", "Righteous", LootTier.GRAY, "righteous.ttf"),
+        font("font-space-grotesk", "Space Grotesk", LootTier.GRAY, "spacegrotesk.ttf"),
+        font("font-cinzel-decorative", "Cinzel Decorative", LootTier.GREEN, "cinzeldecorative.ttf"),
+        font("font-pirata-one", "Pirata One", LootTier.GREEN, "pirataone.ttf"),
+        font("font-new-rocker", "New Rocker", LootTier.GREEN, "newrocker.ttf"),
+        font("font-black-ops-one", "Black Ops One", LootTier.GREEN, "blackopsone.ttf"),
+        font("font-eagle-lake", "Eagle Lake", LootTier.GREEN, "eaglelake.ttf")
     };
+
+    private static final Reward[] COLOR_ENTRIES;
+    private static final Reward[] FONT_ENTRIES;
+    private static final Map<String, Reward> BY_ID;
+    private static final Map<Integer, Reward> BY_COLOR_KEY;
+    private static final EnumMap<LootTier, Reward[]> BY_TIER;
+
+    static {
+        List<Reward> colors = new ArrayList<>();
+        List<Reward> fonts = new ArrayList<>();
+        fonts.add(DEFAULT_FONT);
+
+        Map<String, Reward> idIndex = new HashMap<>(ENTRIES.length * 3);
+        Map<Integer, Reward> keyIndex = new HashMap<>(32);
+        EnumMap<LootTier, List<Reward>> tierLists = new EnumMap<>(LootTier.class);
+        for (LootTier tier : LootTier.values()) {
+            tierLists.put(tier, new ArrayList<>());
+        }
+
+        idIndex.put(DEFAULT_FONT.id.toLowerCase(Locale.ROOT), DEFAULT_FONT);
+        idIndex.put(DEFAULT_FONT.name.toLowerCase(Locale.ROOT), DEFAULT_FONT);
+
+        for (Reward reward : ENTRIES) {
+            idIndex.put(reward.id.toLowerCase(Locale.ROOT), reward);
+            idIndex.putIfAbsent(reward.name.toLowerCase(Locale.ROOT), reward);
+            tierLists.get(reward.tier).add(reward);
+            if (reward.kind == Kind.COLOR) {
+                colors.add(reward);
+                keyIndex.put(reward.key(), reward);
+            } else if (reward.kind == Kind.FONT) {
+                fonts.add(reward);
+            }
+        }
+
+        COLOR_ENTRIES = colors.toArray(new Reward[0]);
+        FONT_ENTRIES = fonts.toArray(new Reward[0]);
+        BY_ID = idIndex;
+        BY_COLOR_KEY = keyIndex;
+
+        EnumMap<LootTier, Reward[]> tierArrays = new EnumMap<>(LootTier.class);
+        for (Map.Entry<LootTier, List<Reward>> entry : tierLists.entrySet()) {
+            tierArrays.put(entry.getKey(), entry.getValue().toArray(new Reward[0]));
+        }
+        BY_TIER = tierArrays;
+    }
 
     private RewardCatalog() {}
 
-    public static Reward[] all() { return ENTRIES.clone(); }
+    public static Reward[] all() {
+        return ENTRIES.clone();
+    }
+
+    public static Reward[] colors() {
+        return COLOR_ENTRIES.clone();
+    }
+
+    /** Includes the free built-in default font, which is never drawn from a lootbox. */
+    public static Reward[] fonts() {
+        return FONT_ENTRIES.clone();
+    }
+
+    public static Reward defaultFont() {
+        return DEFAULT_FONT;
+    }
+
+    /** Resolves a font reward by ID, falling back to the built-in default font. */
+    public static Reward fontOrDefault(String id) {
+        if (id == null) return DEFAULT_FONT;
+        Reward found = byId(id);
+        return (found != null && found.kind == Kind.FONT) ? found : DEFAULT_FONT;
+    }
 
     public static Reward byId(String id) {
         if (id == null) return null;
         String clean = id.trim();
-        for (Reward reward : ENTRIES) {
-            if (reward.id.equalsIgnoreCase(clean) || reward.name.equalsIgnoreCase(clean)) {
-                return reward;
-            }
-        }
-        return null;
+        if (clean.isEmpty()) return null;
+        return BY_ID.get(clean.toLowerCase(Locale.ROOT));
     }
 
     public static Reward byKey(int key) {
-        for (Reward reward : ENTRIES) if (reward.key() == key) return reward;
-        return null;
+        return BY_COLOR_KEY.get(key);
     }
 
     public static Reward pick(LootTier tier, Random random) {
-        if (tier == null || random == null) throw new IllegalArgumentException("tier and random are required");
-        List<Reward> pool = new ArrayList<>();
-        for (Reward reward : ENTRIES) if (reward.tier == tier) pool.add(reward);
-        if (pool.isEmpty()) throw new IllegalStateException("No rewards in " + tier);
-        return pool.get(random.nextInt(pool.size()));
+        if (tier == null || random == null) {
+            throw new IllegalArgumentException("tier and random are required");
+        }
+        Reward[] pool = BY_TIER.get(tier);
+        if (pool == null || pool.length == 0) {
+            throw new IllegalStateException("No rewards in " + tier);
+        }
+        return pool[random.nextInt(pool.length)];
     }
 
     public static void paint(View view, Reward reward, float radius) {
-        if (view == null || reward == null) return;
+        if (view == null || reward == null || reward.kind != Kind.COLOR) return;
         GradientDrawable drawable = new GradientDrawable();
         drawable.setOrientation(GradientDrawable.Orientation.TL_BR);
         drawable.setCornerRadius(radius);
@@ -115,7 +230,7 @@ public final class RewardCatalog {
     }
 
     public static void configure(View view, GradientDrawable drawable, Reward reward, boolean darken) {
-        if (view == null || drawable == null || reward == null) return;
+        if (view == null || drawable == null || reward == null || reward.kind != Kind.COLOR) return;
         // Cancel any previously attached animator on this view to prevent infinite animator leaks
         Object existing = view.getTag(ANIMATOR_TAG_KEY);
         if (existing instanceof ValueAnimator) {

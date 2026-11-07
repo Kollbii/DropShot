@@ -1,6 +1,6 @@
 # Lootbox Module (`Android/lootbox/`)
 
-This Android library provides the cosmetic squash lootbox screen, drop logic, reward inventory, and the AES-256-GCM encrypted storage engine (`SecureStorageEngine`).
+This Android library provides the cosmetic squash lootbox screen, drop logic (25 player colors and 15 bundled SIL OFL Google Fonts), process-wide `RewardFonts` cache, reward inventory, and the AES-256-GCM encrypted storage engine (`SecureStorageEngine`).
 
 ---
 

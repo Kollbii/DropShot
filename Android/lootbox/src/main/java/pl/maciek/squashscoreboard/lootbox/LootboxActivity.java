@@ -107,7 +107,7 @@ public final class LootboxActivity extends Activity {
         back.setBackgroundColor(0xFF303642);
         back.setFilterTouchesWhenObscured(true);
         back.setOnClickListener(v -> finish());
-        header.addView(back, new LinearLayout.LayoutParams(dp(landscape ? 92 : 100), dp(44)));
+        header.addView(back, new LinearLayout.LayoutParams(dp(landscape ? 92 : 100), dp(48)));
         TextView title = label("SQUASH LOOTBOX", landscape ? 22 : 24, FOREGROUND);
         title.setTypeface(null, 1);
         title.setGravity(Gravity.CENTER);
@@ -301,18 +301,36 @@ public final class LootboxActivity extends Activity {
         heading.setTypeface(null, 1);
         heading.setGravity(Gravity.CENTER);
         rewardCard.addView(heading, new LinearLayout.LayoutParams(-1, dp(36)));
-        View square = new View(this);
-        RewardCatalog.paint(square, lastReward, dp(10));
+        View square;
+        if (lastReward.kind == RewardCatalog.Kind.FONT) {
+            RewardCatalog.Reward fontReward = lastReward;
+            square = new View(this) {
+                private final Paint tilePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                @Override protected void onDraw(Canvas canvas) {
+                    float size = Math.min(getWidth(), getHeight());
+                    RewardTilePainter.draw(canvas, (getWidth() - size) / 2f,
+                        (getHeight() - size) / 2f, size, fontReward, tilePaint, this);
+                }
+            };
+        } else {
+            square = new View(this);
+            RewardCatalog.paint(square, lastReward, dp(10));
+        }
         LinearLayout.LayoutParams squareParams = new LinearLayout.LayoutParams(dp(landscape ? 82 : 108), dp(landscape ? 82 : 108));
         squareParams.topMargin = dp(10);
         squareParams.bottomMargin = dp(10);
         rewardCard.addView(square, squareParams);
         TextView name = label(lastReward.name.toUpperCase() + " · " + lastResult.label.toUpperCase(),
             landscape ? 18 : 21, lastResult.color);
-        name.setTypeface(null, 1);
+        if (lastReward.kind == RewardCatalog.Kind.FONT) {
+            RewardFonts.apply(name, lastReward, landscape ? 18f : 21f);
+        } else {
+            name.setTypeface(null, 1);
+        }
         name.setGravity(Gravity.CENTER);
         rewardCard.addView(name, new LinearLayout.LayoutParams(-1, dp(38)));
-        TextView status = label(rewardAlreadyOwned ? "Already in your collection" : "New player color unlocked",
+        TextView status = label(rewardAlreadyOwned ? "Already in your collection"
+            : "New player " + (lastReward.kind == RewardCatalog.Kind.FONT ? "font" : "color") + " unlocked",
             14, MUTED);
         status.setGravity(Gravity.CENTER);
         rewardCard.addView(status, new LinearLayout.LayoutParams(-1, dp(26)));
@@ -323,7 +341,7 @@ public final class LootboxActivity extends Activity {
         continueButton.setBackgroundColor(ACCENT);
         continueButton.setFilterTouchesWhenObscured(true);
         continueButton.setOnClickListener(v -> resetToReady());
-        LinearLayout.LayoutParams continueParams = new LinearLayout.LayoutParams(-1, dp(44));
+        LinearLayout.LayoutParams continueParams = new LinearLayout.LayoutParams(-1, dp(48));
         continueParams.topMargin = dp(8);
         rewardCard.addView(continueButton, continueParams);
         rewardOverlay.setContentDescription("You won " + lastReward.name + ", " + lastResult.label + " tier");

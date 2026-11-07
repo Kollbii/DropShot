@@ -329,4 +329,43 @@ public final class SecurityAndConcurrencyTest {
         assertFalse(CloudConfigStore.isValidHttpsEndpoint("javascript:alert(1)"));
         assertFalse(CloudConfigStore.isValidHttpsEndpoint(""));
     }
+
+    @Test
+    public void sanitizesCosmeticFontIdsAndHandlesLegacySchemaFallback() {
+        assertEquals("font-anton", InputValidator.sanitizeCosmeticIdOrNull("  FONT-ANTON  "));
+        assertEquals("font-bebas-neue", InputValidator.sanitizeCosmeticIdOrNull("font-bebas-neue"));
+        assertEquals(null, InputValidator.sanitizeCosmeticIdOrNull(null));
+        assertEquals(null, InputValidator.sanitizeCosmeticIdOrNull(""));
+        assertEquals(null, InputValidator.sanitizeCosmeticIdOrNull("null"));
+        assertEquals(null, InputValidator.sanitizeCosmeticIdOrNull("font-default"));
+        assertEquals(null, InputValidator.sanitizeCosmeticIdOrNull("../fonts/evil.ttf"));
+        assertEquals(null, InputValidator.sanitizeCosmeticIdOrNull("font'; DROP TABLE cloud_players;--"));
+
+        PlayerProfile profileWithFont = new PlayerProfile(
+            "11111111-2222-4333-8444-555555555555",
+            "Kacper",
+            AppPreferences.BLUE,
+            "  FONT-TEKO "
+        );
+        assertEquals("11111111-2222-4333-8444-555555555555", profileWithFont.id);
+        assertEquals("Kacper", profileWithFont.name);
+        assertEquals("font-teko", profileWithFont.fontId);
+
+        PlayerProfile defaultFontProfile = new PlayerProfile(
+            "developer-profile",
+            "Deweloper",
+            AppPreferences.RED,
+            "font-default"
+        );
+        assertNotEquals("developer-profile", defaultFontProfile.id);
+        assertEquals(null, defaultFontProfile.fontId);
+
+        assertTrue(SupabaseSyncClient.shouldFallbackToLegacySchema(
+            400,
+            "{\"code\":\"PGRST204\",\"message\":\"Could not find the 'equipped_cosmetics' column of 'cloud_players' in the schema cache\"}"
+        ));
+        assertFalse(SupabaseSyncClient.shouldFallbackToLegacySchema(401, "Unauthorized"));
+        assertFalse(SupabaseSyncClient.shouldFallbackToLegacySchema(403, "Forbidden"));
+        assertFalse(SupabaseSyncClient.shouldFallbackToLegacySchema(201, ""));
+    }
 }

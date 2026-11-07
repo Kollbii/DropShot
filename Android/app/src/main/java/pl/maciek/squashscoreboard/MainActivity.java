@@ -44,6 +44,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import pl.maciek.squashscoreboard.lootbox.RewardCatalog;
+import pl.maciek.squashscoreboard.lootbox.RewardFonts;
+import pl.maciek.squashscoreboard.lootbox.RewardInventory;
 
 public class MainActivity extends Activity {
     private UiTheme theme;
@@ -87,6 +89,9 @@ public class MainActivity extends Activity {
     @Override
     public void onCreate(Bundle state) {
         super.onCreate(state);
+        RewardInventory.setOnUnlockListener((ctx, profileId, reward) ->
+            SupabaseSyncClient.syncProfileByIdInBackground(ctx, profileId)
+        );
         loadStyle();
         match.configure(AppPreferences.pointsPerSet(this), AppPreferences.setsPerMatch(this));
         courtStartMs = AppPreferences.courtStart(this);
@@ -213,6 +218,13 @@ public class MainActivity extends Activity {
             AppPreferences.save(this, darkTheme, playerOneColor, playerTwoColor, remoteOne, remoteTwo);
             setContentView(createContent());
         }
+        applyPlayerFont(playerOneTitle, one);
+        applyPlayerFont(playerTwoTitle, two);
+    }
+
+    private void applyPlayerFont(TextView title, PlayerProfile profile) {
+        if (title != null) RewardFonts.apply(title,
+            profile == null ? null : profile.fontId, 24f);
     }
 
     @Override
@@ -368,7 +380,7 @@ public class MainActivity extends Activity {
 
         String nameText = player == 1 ? playerOneName : playerTwoName;
         TextView title = text(nameText, 24, Color.WHITE);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        applyPlayerFont(title, ProfileStore.find(this, player == 1 ? playerOneProfileId : playerTwoProfileId));
         title.setGravity(Gravity.CENTER);
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);

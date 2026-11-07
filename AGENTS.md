@@ -14,8 +14,9 @@ DropShot is a squash scoreboard system. It has these parts:
 
 | Part | Path | Language | Purpose |
 |---|---|---|---|
-| Android app | `Android/app` | Java 11, Android SDK (API 26 to 35) | Keeps the score. Saves the match history, player profiles, statistics, and cloud sync. |
-| Lootbox module | `Android/lootbox` | Java 11, Android library | Cosmetic player colors, lootbox roll, reward inventory, encrypted storage engine. |
+| Android app | `Android/app` | Java 11, Android SDK (API 26 to 35) | Keeps the score. Saves the match history, player profiles, statistics, cosmetics editor, and cloud sync. |
+| Lootbox module | `Android/lootbox` | Java 11, Android library | Cosmetic player colors and bundled name fonts, lootbox roll, reward inventory, encrypted storage engine. |
+| Supabase database | `supabase/` | PostgreSQL SQL | **Golden standard** for how the Supabase database is and will be configured (`schema.sql`, `migrations/`, RLS). |
 | Android Watch app | `AndroidWatch/` | Java 11, Android SDK (API 20 to 22, compileSdk 35) | Standalone Bluetooth RFCOMM watch remote. Shows live 75/25 score tiles, serve-side badge, and reactions. |
 | Watch remote | `ZeppOS/` | JavaScript (Zepp OS API 4.x, ZML) | Amazfit watch app. Sends `POINT_1`, `POINT_2`, `UNDO`, `RESET` to the phone. |
 | Watch workout page | `ZeppOS/workout-extension` | JavaScript | Same commands as a workout data page. |
@@ -40,13 +41,21 @@ DropShot/
 │   ├── ste-writing.md         ← ASD-STE100 rules for all text
 │   ├── ui-ux.md               ← Material Design 3, WCAG 2.2 AA, UI text
 │   └── watch-ecosystem.md     ← Zepp OS and AndroidWatch companions, protocol
-├── .agents/skills/            ← step-by-step procedures for agents
+├── .agents/                   ← Antigravity workspace agents and skills
+│   ├── agents/release-manager.md ← Gemini Flash release automation agent (merge, tag, build, release, cleanup)
+│   └── skills/                ← step-by-step procedures for agents
 ├── Android/
 │   ├── AGENTS.md              ← Android rules
 │   ├── README.md              ← Android module guide
-│   ├── app/                   ← phone/tablet application module
+│   ├── app/                   ← phone/tablet application module (includes bundled `.ttf` fonts)
+│   ├── font-licenses/         ← SIL Open Font License texts for bundled player name fonts
 │   ├── lootbox/               ← reward and encryption library module (has its own AGENTS.md)
 │   └── design/                ← UI/UX specification (source of truth for UI)
+├── supabase/                  ← GOLDEN STANDARD for Supabase DB configuration (schema, migrations, RLS)
+│   ├── AGENTS.md              ← database evolution rules for AI agents
+│   ├── README.md              ← Supabase SQL Editor setup and upgrade guide
+│   ├── schema.sql             ← canonical idempotent PostgreSQL setup and upgrade script
+│   └── migrations/            ← versioned SQL migrations (`001_...`, `002_...`)
 ├── AndroidWatch/
 │   ├── AGENTS.md              ← AndroidWatch rules
 │   ├── README.md              ← AndroidWatch module guide
@@ -107,7 +116,7 @@ Each task must obey these standards.
 |---|---|---|
 | Development guide | Branching, environment, sandbox rules, UI rules, definition of done | [docs/agents/development-guide.md](docs/agents/development-guide.md) |
 | Architecture | Single Hub pattern, activity hierarchy, navigation bar, modal settings | [docs/agents/architecture.md](docs/agents/architecture.md) |
-| Cloud sync | Supabase REST sync, token auth, background push | [docs/agents/cloud-sync.md](docs/agents/cloud-sync.md) |
+| Cloud sync & DB | **Golden standard** for Supabase schema, universal JSONB expansion, RLS, and PostgREST sync | [supabase/schema.sql](supabase/schema.sql), [supabase/AGENTS.md](supabase/AGENTS.md), [docs/agents/cloud-sync.md](docs/agents/cloud-sync.md) |
 | Watch ecosystem | Zepp OS and AndroidWatch remotes, RFCOMM protocol, 75/25 layout | [docs/agents/watch-ecosystem.md](docs/agents/watch-ecosystem.md) |
 | Security | OWASP Top 10 (2021), OWASP Mobile Top 10 (2024), MASVS v2 | [docs/agents/security.md](docs/agents/security.md) |
 | Code and logic | Clean code, SOLID, fail-safe defaults, deterministic state | [docs/agents/coding-standards.md](docs/agents/coding-standards.md) |
@@ -177,7 +186,7 @@ These behaviors keep the score correct. Do not change them without an explicit r
    - Android Watch app (`AndroidWatch/build.gradle`): increase `versionCode` by `1` and `versionName` by `0.1` when watch code changes.
    - Zepp OS apps (`ZeppOS/app.json`, `ZeppOS/workout-extension/app.json`): change only for Zepp OS changes.
 7. **Release tag format**: Use annotated tags in the format `git tag -a 0.1.8 -m "Release 0.1.8"`.
-8. **Final release procedure** (run only when the user requests a release and no more code will be added):
+8. **Final release procedure** (run only when the user requests a release and no more code will be added; delegate to [`.agents/agents/release-manager.md`](.agents/agents/release-manager.md) with `Model: "flash"` to save tokens):
    1. Update `versionCode` and `versionName` in `Android/app/build.gradle` (and `AndroidWatch/build.gradle` if changed).
    2. Verify that `README.md`, `AGENTS.md`, and `docs/agents/` reflect all changes in the release.
    3. Build and test both modules:

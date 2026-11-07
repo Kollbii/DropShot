@@ -16,13 +16,18 @@ import org.json.JSONArray;
  * and asynchronous background persistence.
  * - Eliminates the hardcoded developer privilege-escalation bypass.
  * - Encrypts unlocked entitlement state via `SecureStorageEngine` (AES-256-GCM + AAD).
- * - Guarantees zero disk I/O during 120Hz `onDraw()` rendering passes.
+ * - Guarantees zero disk I/O during 120 Hz `onDraw()` rendering passes.
  */
 public final class RewardInventory {
+    public interface OnUnlockListener {
+        void onRewardUnlocked(Context context, String profileId, RewardCatalog.Reward reward);
+    }
+
     private static final String FILE = "reward_inventory";
     private static final String ENCRYPTED_STATE_KEY = "encrypted_unlocks_v2";
     private static final Set<String> UNLOCKED_CACHE = ConcurrentHashMap.newKeySet();
     private static volatile boolean cacheLoaded;
+    private static volatile OnUnlockListener unlockListener;
     private static final ExecutorService IO_EXECUTOR = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "dropshot-inventory-io");
         t.setDaemon(true);
@@ -30,6 +35,10 @@ public final class RewardInventory {
     });
 
     private RewardInventory() {}
+
+    public static void setOnUnlockListener(OnUnlockListener listener) {
+        unlockListener = listener;
+    }
 
     public static boolean owns(Context context, String profileId, RewardCatalog.Reward reward) {
         if (reward == null) return false;
@@ -40,6 +49,20 @@ public final class RewardInventory {
     }
 
     public static void unlock(Context context, String profileId, RewardCatalog.Reward reward) {
+        if (recordUnlock(context, profileId, reward)) {
+            OnUnlockListener listener = unlockListener;
+            if (listener != null && context != null) {
+                listener.onRewardUnlocked(context, profileId, reward);
+            }
+        }
+    }
+
+    /** Restores an entitlement pulled from cloud storage without triggering an echo cloud push. */
+    public static void restoreFromCloud(Context context, String profileId, RewardCatalog.Reward reward) {
+        recordUnlock(context, profileId, reward);
+    }
+
+    private static boolean recordUnlock(Context context, String profileId, RewardCatalog.Reward reward) {
         if (!LootboxAuthoritativeService.isValidProfileId(profileId)) {
             throw new IllegalArgumentException("A valid player profile ID is required to unlock a reward");
         }
@@ -49,10 +72,22 @@ public final class RewardInventory {
         ensureLoaded(context);
         if (UNLOCKED_CACHE.add(cacheKey(profileId, reward.id))) {
             persistAsync(context);
+            return true;
         }
+        return false;
     }
 
+    /** Returns owned color rewards (compatible with callers expecting `Reward.key()`). */
     public static RewardCatalog.Reward[] available(Context context, String profileId) {
+        List<RewardCatalog.Reward> result = new ArrayList<>();
+        for (RewardCatalog.Reward reward : RewardCatalog.colors()) {
+            if (owns(context, profileId, reward)) result.add(reward);
+        }
+        return result.toArray(new RewardCatalog.Reward[0]);
+    }
+
+    /** Returns all owned rewards across every category (colors, fonts, and future kinds) for cloud sync. */
+    public static RewardCatalog.Reward[] availableAll(Context context, String profileId) {
         List<RewardCatalog.Reward> result = new ArrayList<>();
         for (RewardCatalog.Reward reward : RewardCatalog.all()) {
             if (owns(context, profileId, reward)) result.add(reward);
@@ -152,7 +187,7 @@ public final class RewardInventory {
     }
 
     private static boolean isStarter(String id) {
-        return "blue".equals(id) || "red".equals(id)
+        return "font-default".equals(id) || "blue".equals(id) || "red".equals(id)
             || "green".equals(id) || "gold".equals(id);
     }
 

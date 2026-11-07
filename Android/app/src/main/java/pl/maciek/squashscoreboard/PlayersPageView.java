@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import pl.maciek.squashscoreboard.lootbox.LootboxActivity;
+import pl.maciek.squashscoreboard.lootbox.RewardFonts;
 
 /**
  * Self-contained page view for player profiles and statistics.
@@ -145,7 +146,7 @@ public class PlayersPageView extends LinearLayout {
 
         String headerText = cloudLinked ? p.name + "  ·  ☁ CLOUD" : p.name;
         TextView name = text(headerText, 20, accent);
-        name.setTypeface(Typeface.DEFAULT_BOLD);
+        RewardFonts.apply(name, p.fontId, 20f);
 
         TextView basic = text(
             "Matches: " + s.matches + "   ·   Wins: " + s.wins + " (" + rate + "%)"

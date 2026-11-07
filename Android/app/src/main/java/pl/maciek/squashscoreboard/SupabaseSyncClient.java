@@ -5,7 +5,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -19,18 +18,31 @@ import pl.maciek.squashscoreboard.lootbox.RewardInventory;
 /**
  * [MASVS-NETWORK] [MASVS-AUTH] [PERF-120HZ]
  * Zero-dependency PostgREST HTTP client for Supabase synchronization.
- * - Uses only Android framework `HttpsURLConnection` and `org.json` (100% GrapheneOS compatible,
- *   zero Google Play Services dependencies).
- * - Enforces HTTPS-only connections, strict connect/read timeouts, and response size bounds.
- * - Authenticates player requests via `x-player-token-hash` (SHA-256 hex digest) evaluated by
- *   PostgreSQL Row Level Security (RLS).
- * - Runs all network I/O on a background thread and dispatches UI callbacks on the main thread.
+ *
+ * <p><b>Database Golden Standard for AI Agents</b>:
+ * Read `supabase/schema.sql`, `supabase/migrations/`, and `docs/agents/cloud-sync.md`
+ * before you change any query, payload column, or synchronization rule in this class.
+ * `supabase/schema.sql` is the single source of truth for how the Supabase PostgreSQL
+ * database is and will be configured.
+ *
+ * <ul>
+ *   <li>Uses only Android framework `HttpsURLConnection` and `org.json` (100% GrapheneOS
+ *       compatible, zero Google Play Services dependencies).</li>
+ *   <li>Enforces HTTPS-only connections, strict connect/read timeouts, and response size bounds.</li>
+ *   <li>Authenticates player requests via `x-player-token-hash` (SHA-256 hex digest) evaluated by
+ *       PostgreSQL Row Level Security (RLS).</li>
+ *   <li>Writes universal JSONB expansion columns (`equipped_cosmetics`, `stats_ext`,
+ *       `schema_version`) and falls back to base v1 columns automatically if the remote
+ *       Supabase project has not applied `002_universal_cosmetics_and_stats.sql` yet.</li>
+ *   <li>Runs all network I/O on a background thread and dispatches UI callbacks on the main thread.</li>
+ * </ul>
  */
 public final class SupabaseSyncClient {
     private static final String TAG = "DropShotCloud";
     private static final int CONNECT_TIMEOUT_MS = 8000;
     private static final int READ_TIMEOUT_MS = 10000;
     private static final int MAX_RESPONSE_BYTES = 512 * 1024; // 512 KB cap
+    public static final int CURRENT_SCHEMA_VERSION = 2;
 
     public interface Callback<T> {
         void onSuccess(T result);
@@ -50,8 +62,8 @@ public final class SupabaseSyncClient {
     private SupabaseSyncClient() {}
 
     /**
-     * Pulls a cloud player profile, unlocked rewards, and match history from Supabase using
-     * the SHA-256 hash of `rawSecretToken` in `x-player-token-hash`.
+     * Pulls a cloud player profile, equipped cosmetics, unlocked rewards, and match history
+     * from Supabase using the SHA-256 hash of `rawSecretToken` in `x-player-token-hash`.
      */
     public static void pullPlayerAsync(
         Context context,
@@ -95,6 +107,15 @@ public final class SupabaseSyncClient {
                     cloudId = InputValidator.generateProfileUuid();
                 }
 
+                JSONObject equippedObj = optJsonObjectFlexible(playerObj, "equipped_cosmetics");
+                boolean hasCloudFontField = equippedObj != null && equippedObj.has("font");
+                String cloudFontId = hasCloudFontField
+                    ? InputValidator.sanitizeCosmeticIdOrNull(equippedObj.optString("font", null))
+                    : null;
+                if (equippedObj != null && equippedObj.has("color")) {
+                    cloudColor = equippedObj.optInt("color", cloudColor);
+                }
+
                 // 2. Fetch player's cloud match records filtered by player_id
                 String matchesEndpoint = baseUrl
                     + "/rest/v1/cloud_player_matches?player_id=eq." + cloudId
@@ -110,7 +131,9 @@ public final class SupabaseSyncClient {
                         if (recJson != null) {
                             try {
                                 cloudMatches.add(MatchRecord.fromJson(recJson));
-                            } catch (Exception ignored) { }
+                            } catch (Exception ignored) {
+                                // Skip malformed remote match JSON without aborting pull
+                            }
                         }
                     }
                 }
@@ -121,7 +144,8 @@ public final class SupabaseSyncClient {
                 PlayerProfile resolvedProfile;
                 if (existingById != null) {
                     String oldName = existingById.name;
-                    resolvedProfile = new PlayerProfile(cloudId, cloudName, cloudColor);
+                    String mergedFontId = hasCloudFontField ? cloudFontId : existingById.fontId;
+                    resolvedProfile = new PlayerProfile(cloudId, cloudName, cloudColor, mergedFontId);
                     ProfileStore.update(appContext, resolvedProfile);
                     if (!oldName.equals(cloudName)) {
                         MatchHistoryStore.renameProfile(appContext, cloudId, oldName, cloudName);
@@ -129,7 +153,8 @@ public final class SupabaseSyncClient {
                 } else if (existingByName != null) {
                     // Replace local profile ID with cloud profile ID so future matches link cleanly
                     List<PlayerProfile> current = new ArrayList<>(ProfileStore.load(appContext));
-                    resolvedProfile = new PlayerProfile(cloudId, cloudName, cloudColor);
+                    String mergedFontId = hasCloudFontField ? cloudFontId : existingByName.fontId;
+                    resolvedProfile = new PlayerProfile(cloudId, cloudName, cloudColor, mergedFontId);
                     for (int i = 0; i < current.size(); i++) {
                         if (current.get(i).id.equals(existingByName.id)) {
                             current.set(i, resolvedProfile);
@@ -139,11 +164,11 @@ public final class SupabaseSyncClient {
                     ProfileStore.save(appContext, current);
                     MatchHistoryStore.renameProfile(appContext, cloudId, existingByName.name, cloudName);
                 } else {
-                    resolvedProfile = new PlayerProfile(cloudId, cloudName, cloudColor);
+                    resolvedProfile = new PlayerProfile(cloudId, cloudName, cloudColor, cloudFontId);
                     ProfileStore.add(appContext, resolvedProfile);
                 }
 
-                // 4. Restore unlocked rewards from cloud
+                // 4. Restore unlocked rewards (colors + fonts + future kinds) from cloud
                 JSONArray unlockedRewards = playerObj.optJSONArray("unlocked_rewards");
                 if (unlockedRewards == null) {
                     String raw = playerObj.optString("unlocked_rewards", null);
@@ -166,13 +191,19 @@ public final class SupabaseSyncClient {
                         String rewardId = unlockedRewards.optString(i, null);
                         RewardCatalog.Reward reward = RewardCatalog.byId(rewardId);
                         if (reward != null) {
-                            RewardInventory.unlock(appContext, resolvedProfile.id, reward);
+                            RewardInventory.restoreFromCloud(appContext, resolvedProfile.id, reward);
                         }
                     }
                 }
-                RewardCatalog.Reward equippedReward = RewardCatalog.byKey(cloudColor);
-                if (equippedReward != null) {
-                    RewardInventory.unlock(appContext, resolvedProfile.id, equippedReward);
+                RewardCatalog.Reward equippedColorReward = RewardCatalog.byKey(cloudColor);
+                if (equippedColorReward != null) {
+                    RewardInventory.restoreFromCloud(appContext, resolvedProfile.id, equippedColorReward);
+                }
+                if (resolvedProfile.fontId != null) {
+                    RewardCatalog.Reward equippedFontReward = RewardCatalog.byId(resolvedProfile.fontId);
+                    if (equippedFontReward != null) {
+                        RewardInventory.restoreFromCloud(appContext, resolvedProfile.id, equippedFontReward);
+                    }
                 }
 
                 // 5. Merge cloud match history into local MatchHistoryStore
@@ -201,7 +232,8 @@ public final class SupabaseSyncClient {
 
     /**
      * Registers or links a local player profile to Supabase using the given secret token,
-     * uploading their current profile, unlocked rewards, career statistics, and match history.
+     * uploading their current profile, equipped cosmetics, unlocked rewards, career statistics,
+     * and match history.
      */
     public static void registerOrPushPlayerAsync(
         Context context,
@@ -272,7 +304,7 @@ public final class SupabaseSyncClient {
     }
 
     /**
-     * Pushes a player's latest profile (name/color/unlocks) and statistics in the background.
+     * Pushes a player's latest profile (name, equipped cosmetics, unlocks) and statistics in the background.
      */
     public static void syncProfileInBackground(Context context, PlayerProfile profile) {
         if (context == null || profile == null) return;
@@ -288,6 +320,17 @@ public final class SupabaseSyncClient {
                 SafeLog.w(TAG, "Background profile sync skipped", e);
             }
         });
+    }
+
+    /**
+     * Looks up `profileId` and syncs the profile in the background when a new lootbox reward unlocks.
+     */
+    public static void syncProfileByIdInBackground(Context context, String profileId) {
+        if (context == null || !InputValidator.isValidProfileId(profileId)) return;
+        PlayerProfile profile = ProfileStore.find(context, profileId);
+        if (profile != null) {
+            syncProfileInBackground(context, profile);
+        }
     }
 
     private static void syncParticipantIfLinked(
@@ -342,9 +385,28 @@ public final class SupabaseSyncClient {
 
         PlayerStatistics.Summary summary = PlayerStatistics.calculate(appContext, profile);
         JSONArray unlockedJson = new JSONArray();
-        for (RewardCatalog.Reward r : RewardInventory.available(appContext, profile.id)) {
+        for (RewardCatalog.Reward r : RewardInventory.availableAll(appContext, profile.id)) {
             unlockedJson.put(r.id);
         }
+
+        JSONObject equippedCosmetics = new JSONObject();
+        equippedCosmetics.put("color", profile.color);
+        equippedCosmetics.put("font", profile.fontId != null ? profile.fontId : "font-default");
+
+        JSONObject statsExt = new JSONObject();
+        statsExt.put("serves_total", summary.servesTotal);
+        statsExt.put("serves_won", summary.servesWon);
+        statsExt.put("receives_total", summary.receivesTotal);
+        statsExt.put("receives_won", summary.receivesWon);
+        statsExt.put("right_picks", summary.rightPicks);
+        statsExt.put("left_picks", summary.leftPicks);
+        statsExt.put("right_serves_total", summary.rightServesTotal);
+        statsExt.put("right_serves_won", summary.rightServesWon);
+        statsExt.put("left_serves_total", summary.leftServesTotal);
+        statsExt.put("left_serves_won", summary.leftServesWon);
+        statsExt.put("laplace_win_prob", summary.laplaceWinProbability());
+        statsExt.put("wilson_lower_95", summary.wilsonLowerBound95());
+        statsExt.put("markov_serve_share", summary.markovServeShare());
 
         JSONObject playerPayload = new JSONObject();
         playerPayload.put("id", targetCloudPlayerId);
@@ -359,6 +421,9 @@ public final class SupabaseSyncClient {
         playerPayload.put("total_sets", summary.totalSets);
         playerPayload.put("score_67", summary.score67);
         playerPayload.put("score_69", summary.score69);
+        playerPayload.put("equipped_cosmetics", equippedCosmetics);
+        playerPayload.put("stats_ext", statsExt);
+        playerPayload.put("schema_version", CURRENT_SCHEMA_VERSION);
 
         String postEndpoint = baseUrl + "/rest/v1/cloud_players?on_conflict=token_hash";
         HttpResponse upsertPlayerResp = executeRequest(
@@ -369,6 +434,21 @@ public final class SupabaseSyncClient {
             "resolution=merge-duplicates,return=minimal",
             playerPayload.toString()
         );
+
+        // Graceful backward compatibility if the Supabase DB has not applied v2 columns yet
+        if (shouldFallbackToLegacySchema(upsertPlayerResp.statusCode, upsertPlayerResp.body)) {
+            playerPayload.remove("equipped_cosmetics");
+            playerPayload.remove("stats_ext");
+            playerPayload.remove("schema_version");
+            upsertPlayerResp = executeRequest(
+                "POST",
+                postEndpoint,
+                anonKey,
+                tokenHash,
+                "resolution=merge-duplicates,return=minimal",
+                playerPayload.toString()
+            );
+        }
 
         if (upsertPlayerResp.statusCode < 200 || upsertPlayerResp.statusCode >= 300) {
             return upsertPlayerResp.statusCode;
@@ -387,6 +467,34 @@ public final class SupabaseSyncClient {
             }
         }
         return upsertPlayerResp.statusCode;
+    }
+
+    static boolean shouldFallbackToLegacySchema(int statusCode, String errorBody) {
+        if (statusCode != 400 || errorBody == null || errorBody.isEmpty()) {
+            return false;
+        }
+        return errorBody.contains("PGRST204")
+            || errorBody.contains("equipped_cosmetics")
+            || errorBody.contains("stats_ext")
+            || errorBody.contains("schema_version");
+    }
+
+    private static JSONObject optJsonObjectFlexible(JSONObject parent, String key) {
+        if (parent == null || !parent.has(key) || parent.isNull(key)) return null;
+        JSONObject direct = parent.optJSONObject(key);
+        if (direct != null) return direct;
+        String raw = parent.optString(key, null);
+        if (raw != null) {
+            String trimmed = raw.trim();
+            if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+                try {
+                    return new JSONObject(trimmed);
+                } catch (Exception ignored) {
+                    // Ignore malformed JSON string
+                }
+            }
+        }
+        return null;
     }
 
     private static void upsertSingleMatch(
@@ -519,4 +627,3 @@ public final class SupabaseSyncClient {
         }
     }
 }
-

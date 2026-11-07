@@ -33,7 +33,7 @@ The app uses a simple layered structure. Keep the layers separate.
 | Domain logic | `MatchState`, `PlayerStatistics`, `MatchRecord` | Pure Java. No Android types. Deterministic. Unit-tested. `MatchRecord` precomputes $O(1)$ point/set/serve/side prefix tables; `PlayerStatistics.calculateAll` aggregates in $O(P + M \cdot N)$ time. |
 | Validation | `InputValidator` | All untrusted input goes through this class. |
 | Repositories | `ProfileStore`, `MatchHistoryStore`, `CloudConfigStore`, `AppPreferences` | In-memory cache for reads. Encrypted, asynchronous writes for personal and game data. |
-| Infrastructure | `AsyncRepositoryExecutor`, `SafeLog`, `WatchCommandServer`, `BluetoothWatchServer`, `SupabaseSyncClient` | Background I/O, safe logs, loopback Zepp bridge, Bluetooth RFCOMM watch bridge, HTTPS PostgREST cloud sync. |
+| Infrastructure | `AsyncRepositoryExecutor`, `SafeLog`, `WatchCommandServer`, `BluetoothWatchServer`, `SupabaseSyncClient` | Background I/O, safe logs, loopback Zepp bridge, Bluetooth RFCOMM watch bridge, HTTPS PostgREST cloud sync (see `../supabase/schema.sql` golden standard). |
 | Lootbox module | see [lootbox/AGENTS.md](lootbox/AGENTS.md) | The app depends on the module. The module must not depend on the app. |
 
 ### 2.1 Data flow
@@ -94,8 +94,8 @@ Full rules: [../docs/agents/ui-ux.md](../docs/agents/ui-ux.md).
 
 | Module | Test class | Scope |
 |---|---|---|
-| `:app` | `SecurityAndConcurrencyTest` | Input validation, IDs, bridge host and token checks, `MatchState`, temporary seed |
-| `:lootbox` | `TierRollerTest`, `ReelTimingTest`, `ReelLandingTest`, `SecurityAndAuthoritativeLootboxTest` | Roll weights, reel timing, ticket security, AES-GCM |
+| `:app` | `SecurityAndConcurrencyTest` | Input validation, cosmetic font ID sanitization, IDs, bridge host and token checks, `MatchState`, scalable stats, cloud schema fallback |
+| `:lootbox` | `RewardCatalogTest`, `TierRollerTest`, `ReelTimingTest`, `ReelLandingTest`, `SecurityAndAuthoritativeLootboxTest` | Catalog integrity and $O(1)$ lookups, roll weights, reel timing, ticket security, AES-GCM |
 
 1. Write JVM unit tests (`src/test/java`). There are no instrumented tests.
 2. In JVM tests, `android.*` classes are stubs. `Context` is `null`. Design logic so that it can run without Android.

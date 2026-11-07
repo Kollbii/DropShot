@@ -4,17 +4,18 @@ These rules apply to `Android/lootbox/`. They add to [../AGENTS.md](../AGENTS.md
 
 ## 1. Purpose
 
-The module gives cosmetic player colors. It contains:
+The module gives cosmetic player colors and bundled name fonts. It contains:
 
 | Class | Responsibility |
 |---|---|
-| `RewardCatalog` | The single source of truth for all rewards (ID, name, tier, colors). |
+| `RewardCatalog` | The single source of truth for all rewards (ID, name, tier, kind, colors, font file) with $O(1)$ precomputed lookup tables. |
+| `RewardFonts` | Lock-free process-wide `Typeface`, optical size-scale, and tile glyph size cache for bundled `.ttf` fonts. |
 | `LootTier` | Tiers and absolute drop weights (total 100). |
 | `TierRoller` | Rolls a tier. Checks the rarest tier first. |
 | `LootboxAuthoritativeService` | `SecureRandom` roll, single-use HMAC-signed tickets, profile binding. |
-| `RewardInventory` | Encrypted, profile-scoped unlocks. In-memory cache. |
+| `RewardInventory` | Encrypted, profile-scoped unlocks (`available` for colors, `availableAll` for all kinds, `restoreFromCloud` for sync). |
 | `SecureStorageEngine` | AES-256-GCM with AndroidKeyStore. AAD binds each value to its file and key. |
-| `LootboxActivity`, `RewardTilePainter`, `ReelTiming`, `ReelLanding` | UI and animation. |
+| `LootboxActivity`, `RewardTilePainter`, `ReelTiming`, `ReelLanding` | UI and 120 Hz zero-allocation animation. |
 
 See [REWARDS.md](REWARDS.md) for the catalog rules.
 
@@ -36,5 +37,5 @@ See [REWARDS.md](REWARDS.md) for the catalog rules.
 1. `LootboxAuthoritativeService` runs in the app process. The HMAC secret is in memory. This is not server-side authority.
    A rooted device or a modified APK can unlock rewards. The design accepts this risk because rewards are cosmetic only.
 2. Tickets are in memory. A ticket is lost if the activity is destroyed during the spin.
-3. `RewardTilePainter.draw` creates a new `Path` for each call. This is an allocation in `onDraw`. Shaders are cached. Fix the `Path` if you change this class.
+3. `RewardTilePainter.draw` reuses a static `FLOW_PATH` and caches shaders and font glyph sizes on the UI thread. Do not call `RewardTilePainter.draw` from background threads.
 4. `RewardCatalog.configure` indexes `% 6` for animated rewards. An animated reward must have 7 colors (6 plus the first color again).
