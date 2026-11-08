@@ -61,6 +61,7 @@ Tap the `⌃` button at the bottom of the screen to open the navigation bar.
 | **Select starting server (`0-0`)** | Match / Watch | Before the first point of the match, tap `[SERVE]` on the non-server panel or watch tile to switch who serves first. |
 | **Toggle serve side (`[R]` / `[L]`)** | Match / Watch | At `0-0` or immediately after winning a handout, tap `[R]` / `[L]` on the phone or watch to switch sides freely. After scoring a point on your own serve, the badge turns dimmed red, locks manual switching, and alternates `[R]` ↔ `[L]` automatically. |
 | **Hide serve badge on phone** | Settings → Appearance | Toggle **Show serve side indicator ([R] / [L]) on phone** in **Settings → Appearance** (the watch indicator stays active). |
+| **Change score and player name size** | Settings → Appearance | Select **Standard (112 pt / 26 pt)**, **Large (120 pt / 28 pt)**, or **Extra large (132 pt / 32 pt)** in **Settings → Appearance**. |
 | **Pause or resume match** | Match | Tap `Ⅱ` / `▶` in the top bar, or tap the pause overlay. |
 | **Start a new match** | Match | Tap `↺` in the top bar, or hold `RESET` on the watch. |
 | **Start or stop court timer** | Match | Tap **Start court timer** in the top-left corner. |
@@ -69,11 +70,13 @@ Tap the `⌃` button at the bottom of the screen to open the navigation bar.
 | **Switch dark theme or contrast** | Settings → Appearance | Open **Settings** and tap **Appearance**. |
 | **Change Bluetooth remote keys** | Settings → Remote keys | Open **Settings** and tap **Remote keys**. |
 | **View or resume saved matches** | History | Open the navigation bar and tap **History**. |
-| **View match charts and stats** | History → Match detail | Tap any match row in the **History** list. |
+| **View match statistics & [L]/[R] serve chart** | Post-match / History → Match detail | Tap **Show match statistics** after a match finishes, or tap **Show statistics** on any row in **History**. |
+| **View match charts** | Post-match / History → Match detail | Tap **Show match charts** after a match finishes, or tap any match row in **History**. |
+| **Switch Player 1 and Player 2** | Settings → Players & rules | Open **Settings → Players & rules** and tap **Switch players**. |
 | **Add a player profile** | Players | Open **Players** and tap **Add player**. |
 | **Compare 2 players** | Players | Open **Players** and tap **Compare players**. |
 | **Customize colors & fonts** | Players → Edit player | Open a player profile and tap **Edit player** to preview and equip unlocked colors and player name fonts. |
-| **Unlock colors & fonts** | Players → Lootbox | Open **Players** and tap **Open lootbox prototype**. |
+| **Unlock colors & fonts** | Players → Lootbox | Open **Players** and tap **Open reward lootbox**. |
 | **Sync cosmetics & stats to cloud** | Players | Open **Players** and tap **Set up cloud** or **Link cloud** (database setup in [`supabase/schema.sql`](supabase/schema.sql)). |
 
 ---
@@ -87,8 +90,11 @@ Tap the `⌃` button at the bottom of the screen to open the navigation bar.
 - You can change both numbers in **Settings → Players & rules**.
 - The active server shows a highlight border and serve side (`[R]` or `[L]`). Before the first point (`0-0` in Game 1), the other player shows `[SERVE]` so you can choose the starting server.
 - On a new service turn (handout or `0-0`), the server can tap `[R]` / `[L]` as many times as desired. After the server wins a point on their own serve, the `[R]` / `[L]` badge shows a dimmed red background, locks manual switching, and alternates `[R]` ↔ `[L]` automatically after each consecutive point.
-- You can hide the `[R]` / `[L]` badge on the phone only in **Settings → Appearance** (`Show serve side indicator ([R] / [L]) on phone`).
+- You can hide the `[R]` / `[L]` badge on the phone only in **Settings → Appearance** (`Show serve side indicator ([R] / [L]) on phone`), and choose the score and player name size (`Standard`, `Large`, or `Extra large`). The `[R]` / `[L]` badge overlays the bottom of the score frame so the score digits stay in the exact same vertical position at all times.
+- At `10-10` (or `pointsToWinSet - 1` all), the top bar switches to **TIE-BREAK · WIN BY 2** and updates the live target (`12`, `13`, ...).
 - When 1 point wins a game or the match, the top bar shows **GAME BALL** or **MATCH BALL**.
+- Between games, the scoreboard shows the completed game score, current games score, and an automatic **90 s interval** countdown. Tap the screen at any time to start the next game immediately, or tap `↶` to undo the game-winning point.
+- When the match finishes, the post-match card shows game scores, duration, longest streak, serve hold %, and `[L]` / `[R]` server points, with 1-tap buttons for **Show match statistics** (top-down squash court `[L]` / `[R]` serve heatmap, dual-bar comparison rows, and game-filtered rally log) and **Show match charts**. Inside the match detail view, swipe left or right (or use the top-bar view selector) to switch between **Point chart**, **Game chart**, **Game scores**, and **Statistics**.
 - When the score reaches `6-7`, `7-6`, `6-9`, or `9-6`, the screen shows animations.
 
 ### 4.2 Court timer

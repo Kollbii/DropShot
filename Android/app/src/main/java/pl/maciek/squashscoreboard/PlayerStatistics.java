@@ -17,6 +17,8 @@ public final class PlayerStatistics {
         public int matches, wins, points, wonSets, totalSets, score67, score69;
         public int servesTotal, servesWon, receivesTotal, receivesWon;
         public int rightPicks, leftPicks, rightServesTotal, rightServesWon, leftServesTotal, leftServesWon;
+        public int pickedServesTotal, pickedServesWon, altServesTotal, altServesWon;
+        public int receivesVsRightTotal, receivesVsRightWon, receivesVsLeftTotal, receivesVsLeftWon;
 
         /** Bayesian Beta(1, 1) Laplace-smoothed match win probability: (W + 1) / (M + 2). */
         public double laplaceWinProbability() {
@@ -187,6 +189,11 @@ public final class PlayerStatistics {
                 if (ps.sidePicked) {
                     if (ps.serviceSide == 'L') srvSummary.leftPicks++;
                     else srvSummary.rightPicks++;
+                    srvSummary.pickedServesTotal++;
+                    if (serverWon) srvSummary.pickedServesWon++;
+                } else {
+                    srvSummary.altServesTotal++;
+                    if (serverWon) srvSummary.altServesWon++;
                 }
                 if (ps.serviceSide == 'L') {
                     srvSummary.leftServesTotal++;
@@ -199,6 +206,13 @@ public final class PlayerStatistics {
             if (rcvSummary != null) {
                 rcvSummary.receivesTotal++;
                 if (!serverWon) rcvSummary.receivesWon++;
+                if (ps.serviceSide == 'L') {
+                    rcvSummary.receivesVsLeftTotal++;
+                    if (!serverWon) rcvSummary.receivesVsLeftWon++;
+                } else {
+                    rcvSummary.receivesVsRightTotal++;
+                    if (!serverWon) rcvSummary.receivesVsRightWon++;
+                }
             }
         }
     }

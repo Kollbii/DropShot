@@ -167,6 +167,27 @@ public final class MatchState {
         return p1Ball || p2Ball;
     }
 
+    /**
+     * Returns true when both players have reached at least `pointsToWinSet - 1` (for example 10-10 in an 11-point game),
+     * triggering the squash win-by-2 tie-break rule.
+     */
+    public boolean isTieBreak() {
+        return !matchFinished
+            && playerOnePoints >= pointsToWinSet - 1
+            && playerTwoPoints >= pointsToWinSet - 1;
+    }
+
+    /**
+     * Returns the current points target required to win the active game, accounting for win-by-2 tie-breaks
+     * (for example 11 normally, 12 at 10-10 or 11-10, 13 at 11-11).
+     */
+    public int getEffectivePointsTarget() {
+        if (playerOnePoints >= pointsToWinSet - 1 && playerTwoPoints >= pointsToWinSet - 1) {
+            return Math.max(playerOnePoints, playerTwoPoints) + (playerOnePoints == playerTwoPoints ? 2 : 1);
+        }
+        return pointsToWinSet;
+    }
+
     public void resume(
         int pointsPerSet,
         int setsPerMatch,

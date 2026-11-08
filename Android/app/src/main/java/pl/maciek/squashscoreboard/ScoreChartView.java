@@ -9,7 +9,6 @@ import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
 import java.util.List;
-import java.util.Locale;
 
 /** Cumulative points against active match time. Fullscreen supports pinch, drag, zoom buttons, and point inspection. */
 public final class ScoreChartView extends View {
@@ -25,15 +24,14 @@ public final class ScoreChartView extends View {
     private double zoom = 1, windowStart;
     private float lastX, downX;
     private int selected = -1;
+    private String selectedLabel = "";
 
     public ScoreChartView(Context context, MatchRecord record) {
         super(context);
         this.record = record;
         this.theme = new UiTheme(context);
         this.dashEffect = new DashPathEffect(new float[]{dp(10), dp(6)}, 0);
-        long last = 0;
-        for (long t : record.pointTimesMs) last = Math.max(last, t);
-        this.cachedAxisDuration = Math.max(1, Math.max(record.durationMs, last));
+        this.cachedAxisDuration = ChartUtils.axisDurationMs(record);
         setContentDescription("Point timeline chart for " + record.playerOneName + " versus " + record.playerTwoName + ".");
         scaleDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override public boolean onScale(ScaleGestureDetector detector) {
@@ -65,6 +63,7 @@ public final class ScoreChartView extends View {
         zoom = 1;
         windowStart = 0;
         selected = -1;
+        selectedLabel = "";
         invalidate();
     }
 
@@ -195,12 +194,7 @@ public final class ScoreChartView extends View {
         paint.setStyle(Paint.Style.FILL);
         paint.setTextSize(dp(12));
         paint.setTextAlign(Paint.Align.CENTER);
-        MatchRecord.PointScore score = record.scoreAtPoint(selected);
-        String srvName = score.server == 2 ? record.playerTwoName : record.playerOneName;
-        String label = "G" + score.setNumber + " " + score.pointsOne + ":" + score.pointsTwo
-            + " · SRV: " + srvName + " [" + score.serviceSide + "] (" + (score.sidePicked ? "PICK" : "ALT") + ") · "
-            + formatPrecise(time);
-        c.drawText(label, (left + right) / 2, top - dp(9), paint);
+        c.drawText(selectedLabel, (left + right) / 2, top - dp(9), paint);
     }
 
     private static long tickStep(double desired) {
@@ -222,24 +216,15 @@ public final class ScoreChartView extends View {
     }
 
     private boolean hasRecordedTimes() {
-        return !record.pointTimesMs.isEmpty() && record.pointTimesMs.size() == record.pointWinners.size();
+        return ChartUtils.hasRecordedTimes(record);
     }
 
     private long pointTime(int index, long duration) {
-        return hasRecordedTimes()
-            ? Math.min(duration, Math.max(0, record.pointTimesMs.get(index)))
-            : duration * (index + 1) / Math.max(1, record.pointWinners.size());
+        return ChartUtils.pointTimeMs(record, index, duration);
     }
 
     private String format(long ms) {
-        long seconds = ms / 1000;
-        return seconds >= 3600
-            ? String.format(Locale.US, "%d:%02d:%02d", seconds / 3600, (seconds / 60) % 60, seconds % 60)
-            : String.format(Locale.US, "%d:%02d", seconds / 60, seconds % 60);
-    }
-
-    private String formatPrecise(long ms) {
-        return String.format(Locale.US, "%d:%02d.%03d", ms / 60000, (ms / 1000) % 60, ms % 1000);
+        return ChartUtils.formatClock(ms);
     }
 
     private void clampWindow() {
@@ -252,15 +237,25 @@ public final class ScoreChartView extends View {
         scaleDetector.onTouchEvent(event);
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                getParent().requestDisallowInterceptTouchEvent(true);
+                if (zoom > 1.01 && getParent() != null) {
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                }
                 downX = lastX = event.getX();
                 dragged = false;
                 return true;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                if (getParent() != null) {
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                }
+                return true;
             case MotionEvent.ACTION_MOVE:
+                if (scaleDetector.isInProgress() && getParent() != null) {
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                }
                 if (event.getPointerCount() == 1 && !scaleDetector.isInProgress()) {
                     float dx = event.getX() - lastX;
                     if (Math.abs(event.getX() - downX) > dp(8)) dragged = true;
-                    if (dragged) {
+                    if (dragged && zoom > 1.01) {
                         windowStart -= dx / Math.max(1f, getWidth() - dp(68)) * axisDuration() / zoom;
                         clampWindow();
                         invalidate();
@@ -284,22 +279,8 @@ public final class ScoreChartView extends View {
         if (n == 0) return;
         long duration = axisDuration();
         double wanted = windowStart + (touchX - dp(50)) / Math.max(1f, getWidth() - dp(68)) * duration / zoom;
-        int lo = 0, hi = n - 1;
-        while (lo < hi) {
-            int mid = (lo + hi) >>> 1;
-            if (pointTime(mid, duration) < wanted) {
-                lo = mid + 1;
-            } else {
-                hi = mid;
-            }
-        }
-        int bestIndex = lo;
-        if (lo > 0) {
-            double diffPrev = Math.abs(pointTime(lo - 1, duration) - wanted);
-            double diffCurr = Math.abs(pointTime(lo, duration) - wanted);
-            if (diffPrev <= diffCurr) bestIndex = lo - 1;
-        }
-        selected = bestIndex;
+        selected = ChartUtils.binarySearchNearestPoint(record, 0, n, duration, wanted);
+        selectedLabel = ChartUtils.formatPointInspection(record, selected, duration);
         invalidate();
     }
 

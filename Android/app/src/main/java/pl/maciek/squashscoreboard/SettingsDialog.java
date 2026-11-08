@@ -84,15 +84,42 @@ public final class SettingsDialog {
         profileOne.setOnItemSelectedListener(profileVisibility(profileOne, nameOneRow, colorOneRow));
         profileTwo.setOnItemSelectedListener(profileVisibility(profileTwo, nameTwoRow, colorTwoRow));
 
+        Button switchPlayersBtn = theme.tonalButton(activity, "Switch players");
+        switchPlayersBtn.setContentDescription("Switch Player 1 and Player 2.");
+        switchPlayersBtn.setOnClickListener(v -> {
+            int p1Pos = profileOne.getSelectedItemPosition();
+            int p2Pos = profileTwo.getSelectedItemPosition();
+            String n1 = nameOne.getText().toString();
+            String n2 = nameTwo.getText().toString();
+            int c1Pos = colorOne.getSelectedItemPosition();
+            int c2Pos = colorTwo.getSelectedItemPosition();
+            profileOne.setSelection(p2Pos);
+            profileTwo.setSelection(p1Pos);
+            nameOne.setText(n2);
+            nameTwo.setText(n1);
+            colorOne.setSelection(c2Pos);
+            colorTwo.setSelection(c1Pos);
+        });
+        LinearLayout.LayoutParams switchLp = new LinearLayout.LayoutParams(-1, dp(activity, 48));
+        switchLp.topMargin = dp(activity, 8);
+        playersForm.addView(switchPlayersBtn, switchLp);
+
         addSetting(activity, playersForm, muted, "Points to win a game", points);
         addSetting(activity, playersForm, muted, "Games to win the match", sets);
 
         CheckBox darkBox = checkBox(activity, "Use dark theme", AppPreferences.dark(activity), foreground);
         CheckBox hcBox = checkBox(activity, "Use high-contrast mode", AppPreferences.highContrast(activity), foreground);
         CheckBox serveSideBox = checkBox(activity, "Show serve side indicator ([R] / [L]) on phone", AppPreferences.showServeSideIndicator(activity), foreground);
+        Spinner textScaleSpinner = spinner(
+            activity,
+            theme,
+            new String[]{"Standard (112 pt / 26 pt)", "Large (120 pt / 28 pt)", "Extra large (132 pt / 32 pt)"},
+            AppPreferences.scoreboardTextScale(activity)
+        );
         appearanceForm.addView(darkBox);
         appearanceForm.addView(hcBox);
         appearanceForm.addView(serveSideBox);
+        addSetting(activity, appearanceForm, muted, "Score and player name size", textScaleSpinner);
 
         int curPilotOne = AppPreferences.remote(activity, "remote1", KeyEvent.KEYCODE_VOLUME_UP);
         int curPilotTwo = AppPreferences.remote(activity, "remote2", KeyEvent.KEYCODE_VOLUME_DOWN);
@@ -162,7 +189,7 @@ public final class SettingsDialog {
         settingsContent.addView(pageFrame, new LinearLayout.LayoutParams(-1, pageHeight));
         View[] settingsInputs = {
             profileOne, profileTwo, nameOne, nameTwo, points, sets,
-            darkBox, hcBox, serveSideBox, colorOne, colorTwo, pilotOne, pilotTwo, pilotUndo, pilotReset,
+            darkBox, hcBox, serveSideBox, textScaleSpinner, colorOne, colorTwo, pilotOne, pilotTwo, pilotUndo, pilotReset,
             duration, green, yellow, red, vibration
         };
         String baseline = settingsSignature(settingsInputs);
@@ -184,7 +211,7 @@ public final class SettingsDialog {
             save.setOnClickListener(v -> {
                 if (saveSettings(
                     activity, profiles, profileOne, profileTwo, nameOne, nameTwo,
-                    points, sets, darkBox, hcBox, serveSideBox, colorOne, colorTwo,
+                    points, sets, darkBox, hcBox, serveSideBox, textScaleSpinner, colorOne, colorTwo,
                     pilotOne, pilotTwo, pilotUndo, pilotReset,
                     duration, green, yellow, red, vibration
                 )) {
@@ -209,6 +236,7 @@ public final class SettingsDialog {
         CheckBox darkBox,
         CheckBox hcBox,
         CheckBox serveSideBox,
+        Spinner textScaleSpinner,
         Spinner colorOne,
         Spinner colorTwo,
         Spinner pilotOne,
@@ -264,6 +292,7 @@ public final class SettingsDialog {
             );
             AppPreferences.saveAppearance(activity, darkBox.isChecked(), hcBox.isChecked());
             AppPreferences.saveShowServeSideIndicator(activity, serveSideBox.isChecked());
+            AppPreferences.saveScoreboardTextScale(activity, textScaleSpinner.getSelectedItemPosition());
             AppPreferences.saveRules(activity, pts, sts);
             AppPreferences.saveExtra(
                 activity,
@@ -276,8 +305,8 @@ public final class SettingsDialog {
             return true;
         } catch (Exception e) {
             new AlertDialog.Builder(activity)
-                .setTitle("Invalid input")
-                .setMessage("Please check that points and games are valid positive numbers.")
+                .setTitle("Invalid rule values")
+                .setMessage("The points or games value is not valid. Each rule must be 1 or more. Enter valid numbers and tap Save settings.")
                 .setPositiveButton("Close dialog", null)
                 .show();
             return false;
@@ -289,7 +318,8 @@ public final class SettingsDialog {
             "1. SCORE ON THE SCREEN\n" +
             "1. Tap the Player 1 panel to add 1 point to Player 1.\n" +
             "2. Tap the Player 2 panel to add 1 point to Player 2.\n" +
-            "3. Tap Undo point to remove the last point.\n" +
+            "3. Tap [R] or [L] on the active server panel to switch the serve side.\n" +
+            "4. Tap Undo point to remove the last point.\n" +
             "The app awards a game at 11 points with a 2-point lead.\n\n" +
             "2. USE A BLUETOOTH REMOTE CONTROL\n" +
             "WARNING: The volume keys change the score only while the Match screen is open.\n" +
@@ -299,7 +329,10 @@ public final class SettingsDialog {
             "3. CONNECT THE WATCH APPS\n" +
             "1. Android Watch: Install DropShot Watch and connect via Bluetooth.\n" +
             "2. Amazfit Watch: Pair with Zepp app and open Punkty Squash.\n" +
-            "3. Tap player tiles to add points, or tap serve badge to switch side.";
+            "3. Tap player tiles to add points, or tap serve badge to switch side.\n\n" +
+            "4. REVIEW STATISTICS\n" +
+            "1. After a match finishes, tap Show match statistics.\n" +
+            "2. Open History and tap Show statistics to inspect the [L] and [R] serve chart.";
 
         new AlertDialog.Builder(activity)
             .setTitle("Help and remote control guide")

@@ -4,15 +4,20 @@ import android.app.Activity;
 import android.content.res.Configuration;
 import android.graphics.Typeface;
 import android.os.Bundle;
-import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import java.util.Arrays;
 import java.util.Locale;
-import pl.maciek.squashscoreboard.lootbox.RewardFonts;
+import java.util.Map;
 
+/**
+ * Side-by-side career comparison between 2 players using shared {@link StatComparisonRowView}
+ * broadcast proportion bars and [L]/[R] serve box metrics.
+ */
 public class PlayerComparisonActivity extends Activity {
     private PlayerProfile one, two;
     private UiTheme theme;
@@ -37,8 +42,8 @@ public class PlayerComparisonActivity extends Activity {
             return;
         }
         theme = new UiTheme(this);
-        java.util.Map<String, PlayerStatistics.Summary> summaries =
-            PlayerStatistics.calculateAll(this, java.util.Arrays.asList(one, two));
+        Map<String, PlayerStatistics.Summary> summaries =
+            PlayerStatistics.calculateAll(this, Arrays.asList(one, two));
         PlayerStatistics.Summary a = summaries.getOrDefault(one.id, new PlayerStatistics.Summary());
         PlayerStatistics.Summary b = summaries.getOrDefault(two.id, new PlayerStatistics.Summary());
         int[] h2h = headToHead();
@@ -64,66 +69,110 @@ public class PlayerComparisonActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         LinearLayout table = box(theme.background);
         table.setPadding(0, dp(6), 0, dp(6));
-        table.addView(headerRow(), rowParams());
 
-        String[] labels = {
-            "Matches",
-            "Wins",
-            "Win rate",
-            "Laplace win prob",
-            "Wilson 95% bound",
-            "Points",
-            "Avg pts/match",
-            "Serve hold rate",
-            "Side-out rate",
-            "Markov serve %",
-            "Right [R] picks",
-            "Right [R] win %",
-            "Left [L] picks",
-            "Left [L] win %",
-            "6-7 or 7-6",
-            "6-9 or 9-6"
-        };
-        String[] left = {
-            String.valueOf(a.matches),
-            String.valueOf(a.wins),
-            pct(a.wins, a.matches) + "%",
+        TextView courtHeader = text("COURT [L] AND [R] SERVE COMPARISON", 14, theme.primary);
+        courtHeader.setTypeface(Typeface.DEFAULT_BOLD);
+        courtHeader.setGravity(Gravity.CENTER);
+        table.addView(courtHeader, new LinearLayout.LayoutParams(-1, dp(28)));
+
+        CourtSideDiagramView courtDiagram = new CourtSideDiagramView(this, one, a, two, b);
+        LinearLayout.LayoutParams courtLp = new LinearLayout.LayoutParams(-1, -2);
+        courtLp.topMargin = dp(2);
+        courtLp.bottomMargin = dp(8);
+        table.addView(courtDiagram, courtLp);
+
+        addRow(table, StatComparisonRowView.createHeader(
+            this, theme, one.name, one.fontId, one.color, "STATISTICS", two.name, two.fontId, two.color
+        ));
+
+        addMetric(table, String.valueOf(a.matches), "Matches", String.valueOf(b.matches), a.matches, b.matches);
+        addMetric(table, String.valueOf(a.wins), "Wins", String.valueOf(b.wins), a.wins, b.wins);
+        addMetric(table, pct(a.wins, a.matches) + "%", "Win rate", pct(b.wins, b.matches) + "%", pctVal(a.wins, a.matches), pctVal(b.wins, b.matches));
+        addMetric(
+            table,
             String.format(Locale.US, "%.1f%%", 100.0 * a.laplaceWinProbability()),
-            String.format(Locale.US, "%.1f%%", 100.0 * a.wilsonLowerBound95()),
-            String.valueOf(a.points),
-            avg(a.points, a.matches),
-            pct(a.servesWon, a.servesTotal) + "%",
-            pct(a.receivesWon, a.receivesTotal) + "%",
-            String.format(Locale.US, "%.1f%%", 100.0 * a.markovServeShare()),
-            String.valueOf(a.rightPicks),
-            pct(a.rightServesWon, a.rightServesTotal) + "%",
-            String.valueOf(a.leftPicks),
-            pct(a.leftServesWon, a.leftServesTotal) + "%",
-            String.valueOf(a.score67),
-            String.valueOf(a.score69)
-        };
-        String[] right = {
-            String.valueOf(b.matches),
-            String.valueOf(b.wins),
-            pct(b.wins, b.matches) + "%",
+            "Laplace win prob",
             String.format(Locale.US, "%.1f%%", 100.0 * b.laplaceWinProbability()),
+            a.laplaceWinProbability(),
+            b.laplaceWinProbability()
+        );
+        addMetric(
+            table,
+            String.format(Locale.US, "%.1f%%", 100.0 * a.wilsonLowerBound95()),
+            "Wilson 95% bound",
             String.format(Locale.US, "%.1f%%", 100.0 * b.wilsonLowerBound95()),
-            String.valueOf(b.points),
-            avg(b.points, b.matches),
+            a.wilsonLowerBound95(),
+            b.wilsonLowerBound95()
+        );
+        addMetric(table, String.valueOf(a.points), "Points", String.valueOf(b.points), a.points, b.points);
+        addMetric(table, avg(a.points, a.matches), "Avg pts/match", avg(b.points, b.matches), avgVal(a.points, a.matches), avgVal(b.points, b.matches));
+        addMetric(
+            table,
+            pct(a.servesWon, a.servesTotal) + "%",
+            "Serve hold rate",
             pct(b.servesWon, b.servesTotal) + "%",
+            a.serveHoldRate(),
+            b.serveHoldRate()
+        );
+        addMetric(
+            table,
+            pct(a.receivesWon, a.receivesTotal) + "%",
+            "Side-out rate",
             pct(b.receivesWon, b.receivesTotal) + "%",
+            a.sideOutRate(),
+            b.sideOutRate()
+        );
+        addMetric(
+            table,
+            String.format(Locale.US, "%.1f%%", 100.0 * a.markovServeShare()),
+            "Markov serve %",
             String.format(Locale.US, "%.1f%%", 100.0 * b.markovServeShare()),
-            String.valueOf(b.rightPicks),
-            pct(b.rightServesWon, b.rightServesTotal) + "%",
-            String.valueOf(b.leftPicks),
-            pct(b.leftServesWon, b.leftServesTotal) + "%",
-            String.valueOf(b.score67),
-            String.valueOf(b.score69)
-        };
+            a.markovServeShare(),
+            b.markovServeShare()
+        );
+        addMetric(
+            table,
+            boxStat(a.leftServesWon, a.leftServesTotal),
+            "Left [L] serve points",
+            boxStat(b.leftServesWon, b.leftServesTotal),
+            pctVal(a.leftServesWon, a.leftServesTotal),
+            pctVal(b.leftServesWon, b.leftServesTotal)
+        );
+        addMetric(
+            table,
+            boxStat(a.rightServesWon, a.rightServesTotal),
+            "Right [R] serve points",
+            boxStat(b.rightServesWon, b.rightServesTotal),
+            pctVal(a.rightServesWon, a.rightServesTotal),
+            pctVal(b.rightServesWon, b.rightServesTotal)
+        );
+        addMetric(
+            table,
+            "L:" + a.leftPicks + " · R:" + a.rightPicks,
+            "Handout [L]/[R] picks",
+            "L:" + b.leftPicks + " · R:" + b.rightPicks,
+            a.leftPicks + a.rightPicks,
+            b.leftPicks + b.rightPicks
+        );
+        addMetric(
+            table,
+            pct(a.pickedServesWon, a.pickedServesTotal) + "%",
+            "Chosen box (PICK) %",
+            pct(b.pickedServesWon, b.pickedServesTotal) + "%",
+            pctVal(a.pickedServesWon, a.pickedServesTotal),
+            pctVal(b.pickedServesWon, b.pickedServesTotal)
+        );
+        addMetric(
+            table,
+            pct(a.altServesWon, a.altServesTotal) + "%",
+            "Streak box (ALT) %",
+            pct(b.altServesWon, b.altServesTotal) + "%",
+            pctVal(a.altServesWon, a.altServesTotal),
+            pctVal(b.altServesWon, b.altServesTotal)
+        );
+        addMetric(table, String.valueOf(a.score67), "6-7 or 7-6", String.valueOf(b.score67), a.score67, b.score67);
+        addMetric(table, String.valueOf(a.score69), "6-9 or 9-6", String.valueOf(b.score69), a.score69, b.score69);
 
-        for (int i = 0; i < labels.length; i++) {
-            table.addView(statRow(left[i], labels[i], right[i]), rowParams());
-        }
         scroll.addView(table);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
@@ -140,62 +189,14 @@ public class PlayerComparisonActivity extends Activity {
         setContentView(root);
     }
 
-    private LinearLayout.LayoutParams rowParams() {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(48));
+    private void addRow(LinearLayout table, View row) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.topMargin = dp(4);
-        return lp;
+        table.addView(row, lp);
     }
 
-    private LinearLayout headerRow() {
-        int c1 = theme.playerAccentOnSurface(one.color);
-        int c2 = theme.playerAccentOnSurface(two.color);
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setBackground(theme.roundedBox(theme.surfaceHigh, 10, 1, theme.outlineVariant, this));
-
-        TextView first = cell(one.name, 18, c1, true);
-        RewardFonts.apply(first, one.fontId, 18f);
-        first.setSingleLine(true);
-        first.setEllipsize(TextUtils.TruncateAt.END);
-
-        TextView middle = cell("Metric", 16, theme.onSurfaceVariant, true);
-
-        TextView second = cell(two.name, 18, c2, true);
-        RewardFonts.apply(second, two.fontId, 18f);
-        second.setSingleLine(true);
-        second.setEllipsize(TextUtils.TruncateAt.END);
-
-        row.addView(first, new LinearLayout.LayoutParams(0, -1, 1f));
-        row.addView(middle, new LinearLayout.LayoutParams(dp(160), -1));
-        row.addView(second, new LinearLayout.LayoutParams(0, -1, 1f));
-        return row;
-    }
-
-    private LinearLayout statRow(String left, String label, String right) {
-        int c1 = theme.playerAccentOnSurface(one.color);
-        int c2 = theme.playerAccentOnSurface(two.color);
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setBackground(theme.roundedBox(theme.surfaceLow, 10, 1, theme.outlineVariant, this));
-        row.setContentDescription(label + ": " + one.name + " " + left + ", " + two.name + " " + right);
-
-        TextView leftCell = cell(left, 18, c1, true);
-        TextView midCell = cell(label, 16, theme.onSurfaceVariant, false);
-        TextView rightCell = cell(right, 18, c2, true);
-        UiTheme.applyTabularNumbers(leftCell);
-        UiTheme.applyTabularNumbers(rightCell);
-
-        row.addView(leftCell, new LinearLayout.LayoutParams(0, -1, 1f));
-        row.addView(midCell, new LinearLayout.LayoutParams(dp(160), -1));
-        row.addView(rightCell, new LinearLayout.LayoutParams(0, -1, 1f));
-        return row;
-    }
-
-    private TextView cell(String value, int size, int color, boolean bold) {
-        TextView v = text(value, size, color);
-        if (bold) v.setTypeface(Typeface.DEFAULT_BOLD);
-        v.setGravity(Gravity.CENTER);
-        return v;
+    private void addMetric(LinearLayout table, String left, String label, String right, double v1, double v2) {
+        addRow(table, StatComparisonRowView.createMetric(this, theme, left, label, right, one.color, two.color, v1, v2));
     }
 
     private int[] headToHead() {
@@ -228,15 +229,28 @@ public class PlayerComparisonActivity extends Activity {
         return v;
     }
 
-    private String avg(int a, int b) {
+    private static String boxStat(int won, int total) {
+        if (total == 0) return "0/0 (0%)";
+        return won + "/" + total + " (" + Math.round(won * 100f / total) + "%)";
+    }
+
+    private static double avgVal(int a, int b) {
+        return b == 0 ? 0.0 : (double) a / b;
+    }
+
+    private static double pctVal(int a, int b) {
+        return b == 0 ? 0.0 : (100.0 * a) / b;
+    }
+
+    private static String avg(int a, int b) {
         return b == 0 ? "0.0" : String.format(Locale.US, "%.1f", a / (float) b);
     }
 
-    private String pct(int a, int b) {
+    private static String pct(int a, int b) {
         return b == 0 ? "0" : String.valueOf(Math.round(a * 100f / b));
     }
 
     private int dp(int v) {
-        return (int) (v * getResources().getDisplayMetrics().density + 0.5f);
+        return UiTheme.dp(this, v);
     }
 }

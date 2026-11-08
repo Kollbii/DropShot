@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.text.InputType;
@@ -96,44 +97,123 @@ public class PlayerDetailActivity extends Activity {
         LinearLayout content = box(theme.background);
         content.setPadding(0, dp(12), 0, dp(12));
 
-        addStatCard(
+        // Career Squash Court [L] / [R] Server Scoring & Hold Diagram
+        addSectionHeader(content, "COURT [L] AND [R] SERVE HIGHLIGHTS");
+        CourtSideDiagramView courtDiagram = new CourtSideDiagramView(this, profile, s);
+        LinearLayout.LayoutParams courtLp = new LinearLayout.LayoutParams(-1, -2);
+        courtLp.bottomMargin = dp(8);
+        content.addView(courtDiagram, courtLp);
+
+        Button matchesBtn = theme.tonalButton(this, "Show matches for " + profile.name);
+        matchesBtn.setOnClickListener(v -> {
+            startActivity(
+                new Intent(this, HistoryActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    .putExtra(HistoryActivity.EXTRA_ACTIVE_TAB, UiTheme.TAB_HISTORY)
+                    .putExtra(HistoryActivity.EXTRA_SEARCH_QUERY, profile.name)
+            );
+            finish();
+        });
+        LinearLayout.LayoutParams mLp = new LinearLayout.LayoutParams(-1, dp(48));
+        mLp.bottomMargin = dp(10);
+        content.addView(matchesBtn, mLp);
+
+        addSectionHeader(content, "CAREER WIN & SERVE EFFICIENCY");
+        addMetricBar(
             content,
-            cloudLinked
-                ? "Cloud sync: Linked (automatic sync after each game and match)"
-                : "Cloud sync: Local only (tap Link cloud to enable Supabase sync)"
+            "WIN RATE",
+            pct(s.wins, s.matches) + "%",
+            s.wins + "/" + s.matches + " wins",
+            ratio(s.wins, s.matches)
         );
-        addStatCard(content, "Matches: " + s.matches + "   ·   Wins: " + s.wins + " (Win rate: " + pct(s.wins, s.matches) + "%)");
-        addStatCard(
+        addMetricBar(
             content,
-            String.format(
-                Locale.US,
-                "Bayesian win prob (Laplace): %.1f%%   ·   Wilson 95%% lower bound: %.1f%%",
-                100.0 * s.laplaceWinProbability(),
-                100.0 * s.wilsonLowerBound95()
-            )
+            "BAYESIAN WIN PROB (LAPLACE)",
+            String.format(Locale.US, "%.1f%%", 100.0 * s.laplaceWinProbability()),
+            String.format(Locale.US, "Wilson 95%%: %.1f%%", 100.0 * s.wilsonLowerBound95()),
+            s.laplaceWinProbability()
         );
-        addStatCard(content, "Points won: " + s.points + "   ·   Average points per match: " + avg(s.points, s.matches));
-        addStatCard(content, "Average points per game: " + avg(s.points, s.totalSets) + "   ·   Average games won per match: " + avg(s.wonSets, s.matches));
-        addStatCard(
+        addMetricBar(
             content,
-            "Serve hold rate: " + pct(s.servesWon, s.servesTotal) + "% (" + s.servesWon + "/" + s.servesTotal + ")"
-                + "   ·   Side-out rate: " + pct(s.receivesWon, s.receivesTotal) + "% (" + s.receivesWon + "/" + s.receivesTotal + ")"
+            "SERVE HOLD RATE",
+            pct(s.servesWon, s.servesTotal) + "%",
+            s.servesWon + "/" + s.servesTotal + " serves",
+            s.serveHoldRate()
         );
-        addStatCard(
+        addMetricBar(
             content,
-            String.format(
-                Locale.US,
-                "Markov steady-state serve share: %.1f%%   ·   Expected rally win rate: %.1f%%",
-                100.0 * s.markovServeShare(),
-                100.0 * s.expectedRallyWinRate()
-            )
+            "SIDE-OUT RATE",
+            pct(s.receivesWon, s.receivesTotal) + "%",
+            s.receivesWon + "/" + s.receivesTotal + " returns",
+            s.sideOutRate()
         );
-        addStatCard(
+        addMetricBar(
             content,
-            "Right [R] picks: " + s.rightPicks + " (Win: " + pct(s.rightServesWon, s.rightServesTotal) + "%)"
-                + "   ·   Left [L] picks: " + s.leftPicks + " (Win: " + pct(s.leftServesWon, s.leftServesTotal) + "%)"
+            "MARKOV SERVE SHARE",
+            String.format(Locale.US, "%.1f%%", 100.0 * s.markovServeShare()),
+            String.format(Locale.US, "Rally win: %.1f%%", 100.0 * s.expectedRallyWinRate()),
+            s.markovServeShare()
         );
-        addStatCard(content, "Points to 6-7 or 7-6: " + s.score67 + "   ·   Points to 6-9 or 9-6: " + s.score69);
+
+        addSectionHeader(content, "COURT [L] AND [R] BOX BREAKDOWN");
+        addMetricBar(
+            content,
+            "LEFT [L] SERVE HOLD",
+            pct(s.leftServesWon, s.leftServesTotal) + "%",
+            s.leftServesWon + "/" + s.leftServesTotal + " pts · Pick " + s.leftPicks,
+            ratio(s.leftServesWon, s.leftServesTotal)
+        );
+        addMetricBar(
+            content,
+            "RIGHT [R] SERVE HOLD",
+            pct(s.rightServesWon, s.rightServesTotal) + "%",
+            s.rightServesWon + "/" + s.rightServesTotal + " pts · Pick " + s.rightPicks,
+            ratio(s.rightServesWon, s.rightServesTotal)
+        );
+        addMetricBar(
+            content,
+            "CHOSEN BOX (PICK) HOLD",
+            pct(s.pickedServesWon, s.pickedServesTotal) + "%",
+            s.pickedServesWon + "/" + s.pickedServesTotal + " pts",
+            ratio(s.pickedServesWon, s.pickedServesTotal)
+        );
+        addMetricBar(
+            content,
+            "STREAK BOX (ALT) HOLD",
+            pct(s.altServesWon, s.altServesTotal) + "%",
+            s.altServesWon + "/" + s.altServesTotal + " pts",
+            ratio(s.altServesWon, s.altServesTotal)
+        );
+
+        addSectionHeader(content, "VOLUME, CLUTCH & CLOUD STATUS");
+        addMetricBar(
+            content,
+            "GAMES WON",
+            pct(s.wonSets, s.totalSets) + "%",
+            s.wonSets + "/" + s.totalSets + " games (" + avg(s.wonSets, s.matches) + "/match)",
+            ratio(s.wonSets, s.totalSets)
+        );
+        addMetricBar(
+            content,
+            "POINTS WON",
+            s.points + " pts",
+            avg(s.points, s.matches) + "/match · " + avg(s.points, s.totalSets) + "/game",
+            -1.0
+        );
+        addMetricBar(
+            content,
+            "CLUTCH 6-7 & 6-9 POINTS",
+            "6-7: " + s.score67,
+            "6-9: " + s.score69,
+            -1.0
+        );
+        addMetricBar(
+            content,
+            "CLOUD SYNC",
+            cloudLinked ? "Linked" : "Local only",
+            cloudLinked ? "Auto-sync active" : "Tap Link cloud",
+            cloudLinked ? 1.0 : 0.0
+        );
 
         scroll.addView(content);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -257,14 +337,34 @@ public class PlayerDetailActivity extends Activity {
         return lp;
     }
 
-    private void addStatCard(LinearLayout parent, String textValue) {
-        TextView card = t(textValue, 18, theme.onSurface);
-        UiTheme.applyTabularNumbers(card);
-        card.setPadding(dp(18), dp(14), dp(18), dp(14));
-        card.setBackground(theme.roundedBox(theme.surfaceLow, 12, 1, theme.outlineVariant, this));
+    private void addSectionHeader(LinearLayout parent, String titleText) {
+        TextView hdr = new TextView(this);
+        hdr.setText(titleText);
+        hdr.setTextSize(14);
+        hdr.setTextColor(theme.primary);
+        hdr.setTypeface(Typeface.DEFAULT_BOLD);
+        hdr.setGravity(Gravity.CENTER_VERTICAL);
+        hdr.setPadding(dp(4), dp(8), dp(4), dp(4));
+        parent.addView(hdr, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    private void addMetricBar(LinearLayout parent, String label, String primaryValue, String secondaryDetail, double fillRatio) {
+        StatComparisonRowView row = StatComparisonRowView.createSinglePlayerMetric(
+            this,
+            theme,
+            label,
+            primaryValue,
+            secondaryDetail,
+            profile.color,
+            fillRatio
+        );
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(4), 0, dp(4));
-        parent.addView(card, lp);
+        lp.topMargin = dp(4);
+        parent.addView(row, lp);
+    }
+
+    private static double ratio(int a, int b) {
+        return b <= 0 ? 0.0 : (double) a / b;
     }
 
     private LinearLayout box(int c) {

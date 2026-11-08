@@ -11,6 +11,8 @@ public final class AppPreferences {
     public static boolean highContrast(Context c) { return c.getSharedPreferences(NAME, 0).getBoolean("highContrast", false); }
     public static boolean showServeSideIndicator(Context c) { return c.getSharedPreferences(NAME, 0).getBoolean("showServeSideIndicator", true); }
     public static void saveShowServeSideIndicator(Context c, boolean show) { c.getSharedPreferences(NAME, 0).edit().putBoolean("showServeSideIndicator", show).apply(); }
+    public static int scoreboardTextScale(Context c) { return Math.max(0, Math.min(2, c.getSharedPreferences(NAME, 0).getInt("scoreboardTextScale", 1))); }
+    public static void saveScoreboardTextScale(Context c, int scale) { c.getSharedPreferences(NAME, 0).edit().putInt("scoreboardTextScale", Math.max(0, Math.min(2, scale))).apply(); }
     public static int color(Context c, String key, int fallback) { return c.getSharedPreferences(NAME, 0).getInt(key, fallback); }
     public static int remote(Context c, String key, int fallback) { return c.getSharedPreferences(NAME, 0).getInt(key, fallback); }
     public static int pointsPerSet(Context c) { return c.getSharedPreferences(NAME, 0).getInt("pointsPerSet", 11); }

@@ -8,7 +8,7 @@ This directory contains the native Android application (`:app`) and the cosmetic
 
 | Module | Path | Package | Description |
 |---|---|---|---|
-| `:app` | `Android/app` | `pl.maciek.squashscoreboard` | Squash scoreboard, Single Hub for History and Players, player cosmetics editor (colors & bundled Google Fonts), charts, Bluetooth RFCOMM watch server, and Supabase cloud sync. |
+| `:app` | `Android/app` | `pl.maciek.squashscoreboard` | Squash scoreboard, Single Hub for History and Players, player cosmetics editor (colors & bundled Google Fonts), charts, `[L]`/`[R]` court-side serve statistics diagram, Bluetooth RFCOMM watch server, and Supabase cloud sync. |
 | `:lootbox` | `Android/lootbox` | `pl.maciek.squashscoreboard.lootbox` | Reward catalog (25 colors + 15 bundled fonts + default font), `RewardFonts` cache, `SecureRandom` tier roller, HMAC-signed ticket validation, `RewardInventory`, and `SecureStorageEngine` (AES-256-GCM). |
 
 ---

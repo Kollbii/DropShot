@@ -38,6 +38,7 @@ public final class MatchRecord {
     private final byte[] prefixSetNumber;
     // Bit 0: server (0 = P1, 1 = P2), Bit 1: side (0 = 'R', 1 = 'L'), Bit 2: sidePicked (1 = picked, 0 = alternating)
     private final byte[] prefixServeMeta;
+    private volatile Analytics cachedAnalytics;
 
     public MatchRecord(
         long id,
@@ -271,6 +272,158 @@ public final class MatchRecord {
     public boolean isSidePickedAtPoint(int index) {
         if (index < 0 || index >= prefixServeMeta.length) return true;
         return (prefixServeMeta[index] & 4) != 0;
+    }
+
+    /**
+     * [PERF-120HZ] Single-pass O(N) per-match analytics and game-segment breakdown.
+     * Shared across {@link MatchFinishedView}, {@link MatchStatsView}, {@link SetProgressChartView},
+     * {@link SetsChartView}, and {@link HistoryActivity} to eliminate duplicated loops.
+     */
+    public static final class Analytics {
+        public final int[] sets;
+        public final int[] points = new int[2];
+        public final int[] longestStreak = new int[2];
+        public final int[] servesTotal = new int[2];
+        public final int[] servesWon = new int[2];
+        public final int[] receivesTotal = new int[2];
+        public final int[] receivesWon = new int[2];
+        public final int[] rightPicks = new int[2];
+        public final int[] leftPicks = new int[2];
+        public final int[] rightServesTotal = new int[2];
+        public final int[] rightServesWon = new int[2];
+        public final int[] leftServesTotal = new int[2];
+        public final int[] leftServesWon = new int[2];
+        public final int[] pickedServesTotal = new int[2];
+        public final int[] pickedServesWon = new int[2];
+        public final int[] altServesTotal = new int[2];
+        public final int[] altServesWon = new int[2];
+        public final int[] receivesVsRightTotal = new int[2];
+        public final int[] receivesVsRightWon = new int[2];
+        public final int[] receivesVsLeftTotal = new int[2];
+        public final int[] receivesVsLeftWon = new int[2];
+        /** Each entry is `{startPointIndex, endPointIndexExclusive, pointsOne, pointsTwo}`. */
+        public final List<int[]> gameSegments;
+
+        private Analytics(MatchRecord r) {
+            this.sets = r.playedSets();
+            ArrayList<int[]> segments = new ArrayList<>();
+            int n = r.pointWinners.size();
+            int prevWinner = 0, curStreak = 0;
+            int segStart = 0, gOne = 0, gTwo = 0;
+
+            for (int i = 0; i < n; i++) {
+                int winner = r.pointWinners.get(i);
+                if (winner != 1 && winner != 2) continue;
+                int wIdx = winner - 1;
+                points[wIdx]++;
+                curStreak = (winner == prevWinner) ? curStreak + 1 : 1;
+                if (curStreak > longestStreak[wIdx]) longestStreak[wIdx] = curStreak;
+                prevWinner = winner;
+
+                int srv = r.serverAtPoint(i);
+                int sIdx = (srv == 2) ? 1 : 0;
+                int rIdx = 1 - sIdx;
+                char side = r.sideAtPoint(i);
+                boolean picked = r.isSidePickedAtPoint(i);
+                boolean serverScored = (winner == srv);
+
+                servesTotal[sIdx]++;
+                receivesTotal[rIdx]++;
+                if (serverScored) {
+                    servesWon[sIdx]++;
+                } else {
+                    receivesWon[rIdx]++;
+                }
+
+                if (picked) {
+                    if (side == 'L') leftPicks[sIdx]++; else rightPicks[sIdx]++;
+                    pickedServesTotal[sIdx]++;
+                    if (serverScored) pickedServesWon[sIdx]++;
+                } else {
+                    altServesTotal[sIdx]++;
+                    if (serverScored) altServesWon[sIdx]++;
+                }
+
+                if (side == 'L') {
+                    leftServesTotal[sIdx]++;
+                    if (serverScored) leftServesWon[sIdx]++;
+                    receivesVsLeftTotal[rIdx]++;
+                    if (!serverScored) receivesVsLeftWon[rIdx]++;
+                } else {
+                    rightServesTotal[sIdx]++;
+                    if (serverScored) rightServesWon[sIdx]++;
+                    receivesVsRightTotal[rIdx]++;
+                    if (!serverScored) receivesVsRightWon[rIdx]++;
+                }
+
+                if (winner == 1) gOne++; else gTwo++;
+                if (Math.max(gOne, gTwo) >= r.pointsToWinSet && Math.abs(gOne - gTwo) >= 2) {
+                    segments.add(new int[]{segStart, i + 1, gOne, gTwo});
+                    segStart = i + 1;
+                    gOne = 0;
+                    gTwo = 0;
+                }
+            }
+            if (segStart < n) {
+                segments.add(new int[]{segStart, n, gOne, gTwo});
+            } else if (n == 0 && (r.playerOnePoints > 0 || r.playerTwoPoints > 0)) {
+                segments.add(new int[]{0, 0, r.playerOnePoints, r.playerTwoPoints});
+                points[0] = r.playerOnePoints;
+                points[1] = r.playerTwoPoints;
+            }
+            this.gameSegments = Collections.unmodifiableList(segments);
+        }
+
+        public int totalPoints() {
+            return points[0] + points[1];
+        }
+
+        public double serveHoldRate(int playerIndex) {
+            return servesTotal[playerIndex] <= 0 ? 0.0 : (double) servesWon[playerIndex] / servesTotal[playerIndex];
+        }
+
+        public double sideOutRate(int playerIndex) {
+            return receivesTotal[playerIndex] <= 0 ? 0.0 : (double) receivesWon[playerIndex] / receivesTotal[playerIndex];
+        }
+
+        public double rightServeHoldRate(int playerIndex) {
+            return rightServesTotal[playerIndex] <= 0 ? 0.0 : (double) rightServesWon[playerIndex] / rightServesTotal[playerIndex];
+        }
+
+        public double leftServeHoldRate(int playerIndex) {
+            return leftServesTotal[playerIndex] <= 0 ? 0.0 : (double) leftServesWon[playerIndex] / leftServesTotal[playerIndex];
+        }
+
+        public double markovServeShare(int playerIndex) {
+            if (servesTotal[playerIndex] <= 0 && receivesTotal[playerIndex] <= 0) return 0.5;
+            double pS = servesTotal[playerIndex] <= 0 ? 0.5 : (double) servesWon[playerIndex] / servesTotal[playerIndex];
+            double pR = receivesTotal[playerIndex] <= 0 ? 0.5 : (double) receivesWon[playerIndex] / receivesTotal[playerIndex];
+            double denom = (1.0 - pS) + pR;
+            return denom <= 1e-9 ? 0.5 : pR / denom;
+        }
+    }
+
+    /** Lazily computes and caches the single-pass {@link Analytics} for this match record. */
+    public Analytics analytics() {
+        Analytics a = cachedAnalytics;
+        if (a == null) {
+            a = new Analytics(this);
+            cachedAnalytics = a;
+        }
+        return a;
+    }
+
+    /** Formats per-game scores as a compact string such as `"11-8, 9-11, 11-7"`. */
+    public String formattedGameScores() {
+        List<int[]> games = analytics().gameSegments;
+        if (games.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder(games.size() * 7);
+        for (int i = 0; i < games.size(); i++) {
+            if (i > 0) sb.append(", ");
+            int[] g = games.get(i);
+            sb.append(g[2]).append('-').append(g[3]);
+        }
+        return sb.toString();
     }
 
     public JSONObject toJson() throws JSONException {

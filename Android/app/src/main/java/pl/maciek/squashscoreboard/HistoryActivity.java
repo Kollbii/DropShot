@@ -30,6 +30,7 @@ import java.util.Locale;
  */
 public class HistoryActivity extends Activity {
     public static final String EXTRA_ACTIVE_TAB = "activeTab";
+    public static final String EXTRA_SEARCH_QUERY = "searchQuery";
 
     private static final int FILTER_ALL = 0;
     private static final int FILTER_FINISHED = 1;
@@ -39,6 +40,7 @@ public class HistoryActivity extends Activity {
     private int activeTab = UiTheme.TAB_HISTORY;
     private int activeFilter = FILTER_ALL;
     private String searchQuery = "";
+    private EditText searchInputField;
     private LinearLayout listContainer;
     private Button chipAll, chipFinished, chipUnfinished;
     private LinearLayout historyContainer;
@@ -58,8 +60,12 @@ public class HistoryActivity extends Activity {
     @Override
     public void onCreate(Bundle state) {
         super.onCreate(state);
-        if (getIntent() != null && getIntent().hasExtra(EXTRA_ACTIVE_TAB)) {
-            activeTab = getIntent().getIntExtra(EXTRA_ACTIVE_TAB, UiTheme.TAB_HISTORY);
+        if (getIntent() != null) {
+            if (getIntent().hasExtra(EXTRA_ACTIVE_TAB)) {
+                activeTab = getIntent().getIntExtra(EXTRA_ACTIVE_TAB, UiTheme.TAB_HISTORY);
+            }
+            String q = getIntent().getStringExtra(EXTRA_SEARCH_QUERY);
+            if (q != null) searchQuery = InputValidator.sanitizePlayerName(q, "");
         }
         drawHub();
     }
@@ -68,8 +74,17 @@ public class HistoryActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        if (intent != null && intent.hasExtra(EXTRA_ACTIVE_TAB)) {
-            selectTab(intent.getIntExtra(EXTRA_ACTIVE_TAB, UiTheme.TAB_HISTORY));
+        if (intent != null) {
+            String q = intent.getStringExtra(EXTRA_SEARCH_QUERY);
+            if (q != null) {
+                searchQuery = InputValidator.sanitizePlayerName(q, "");
+                if (searchInputField != null) searchInputField.setText(searchQuery);
+            }
+            if (intent.hasExtra(EXTRA_ACTIVE_TAB)) {
+                selectTab(intent.getIntExtra(EXTRA_ACTIVE_TAB, UiTheme.TAB_HISTORY));
+            } else {
+                refreshCurrentTab();
+            }
         }
     }
 
@@ -195,6 +210,7 @@ public class HistoryActivity extends Activity {
             "Search by player name or date",
             InputType.TYPE_CLASS_TEXT
         );
+        searchInputField = searchInput;
         searchInput.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
@@ -372,9 +388,11 @@ public class HistoryActivity extends Activity {
         String date = DateFormat.format("dd.MM.yyyy  HH:mm", new Date(record.finishedAt)).toString();
         String state = record.finished ? "✓ FINISHED" : "◷ UNFINISHED";
         String duration = record.durationMs > 0 ? "  |  " + formatDuration(record.durationMs) : "";
+        String gameScores = record.formattedGameScores();
+        String gamesSuffix = gameScores.isEmpty() ? "" : " (" + gameScores + ")";
         TextView meta = text(
-            record.playerOneSets + " : " + record.playerTwoSets + "  |  " + state + duration + "  |  " + date,
-            16,
+            record.playerOneSets + " : " + record.playerTwoSets + gamesSuffix + "  |  " + state + duration + "  |  " + date,
+            15,
             theme.onSurfaceVariant
         );
         UiTheme.applyTabularNumbers(meta);
@@ -383,6 +401,18 @@ public class HistoryActivity extends Activity {
         infoCol.addView(names);
         infoCol.addView(meta);
         row.addView(infoCol, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        Button statsBtn = theme.tonalButton(this, "Show statistics");
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-2, dp(48));
+        slp.leftMargin = dp(8);
+        statsBtn.setOnClickListener(v ->
+            startActivity(
+                new Intent(this, MatchDetailActivity.class)
+                    .putExtra(MatchDetailActivity.EXTRA_RECORD, toJson(record))
+                    .putExtra(MatchDetailActivity.EXTRA_INITIAL_TAB, MatchDetailActivity.TAB_STATS)
+            )
+        );
+        row.addView(statsBtn, slp);
 
         if (!record.finished) {
             Button resumeBtn = theme.primaryButton(this, "Resume match");
