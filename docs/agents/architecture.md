@@ -25,10 +25,10 @@ DropShot is a squash scoreboard application. It contains 3 primary sub-systems:
    │                                           ├── HistoryPageView (Match List)
    │                                           └── PlayersPageView (Player Profiles)
    │
-   ├── [MatchDetailActivity] (Read-only review of a past match)
-   ├── [PlayerDetailActivity] (Career stats, cloud link, customization link)
-   ├── [PlayerComparisonActivity] (Side-by-side player head-to-head stats)
-   ├── [PlayerCustomizationActivity] (Cosmetic player color selection)
+   ├── [MatchDetailActivity] (Unified 4-page swipeable ChartPager + top-bar view spinner for Point chart, Game chart, Game scores, and MatchStatsView; ChartFullscreenActivity is a compatibility subclass)
+   ├── [PlayerDetailActivity] (Career stats with single-player StatComparisonRowView progress bars, CourtSideDiagramView [L]/[R] map, cloud link, customization link)
+   ├── [PlayerComparisonActivity] (Side-by-side dual-player CourtSideDiagramView + head-to-head StatComparisonRowView bars)
+   ├── [PlayerCustomizationActivity] (Cosmetic player color and bundled font selection)
    └── [LootboxActivity] (Interactive reel roll for cosmetic rewards)
 ```
 

@@ -48,12 +48,15 @@ import pl.maciek.squashscoreboard.lootbox.RewardFonts;
 import pl.maciek.squashscoreboard.lootbox.RewardInventory;
 
 public class MainActivity extends Activity {
+    private static final long WSF_GAME_INTERVAL_MS = 90_000L;
     private UiTheme theme;
     private int background, surface, foreground, muted, playerOneColor, playerTwoColor, remoteOne, remoteTwo, remoteUndo, remoteReset;
+    private int scoreboardTextScale = 1;
     private boolean darkTheme, highContrast, showServeSideIndicator = true, paused, awaitingNextGame;
     private final MatchState match = new MatchState();
     private String playerOneName = "PLAYER 1", playerTwoName = "PLAYER 2", playerOneProfileId, playerTwoProfileId;
-    private long currentMatchId, matchElapsedMs, currentSetElapsedMs, lastClockMs;
+    private long currentMatchId, matchElapsedMs, currentSetElapsedMs, lastClockMs, gameBreakStartMs;
+    private String lastCompletedGameSummary = "";
     private final ArrayList<Long> setDurationsMs = new ArrayList<>();
     private final ArrayList<Long> pointTimesMs = new ArrayList<>();
     private TextView playerOnePoints, playerTwoPoints, playerOneSets, playerTwoSets, status, playerOneTitle, playerTwoTitle;
@@ -137,9 +140,12 @@ public class MainActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         if (intent != null && intent.getStringExtra(MatchDetailActivity.EXTRA_RECORD) != null) {
+            pauseOverlay = null;
+            finishedOverlay = null;
             restoreMatchFromIntent(intent);
             loadStyle();
             setContentView(createContent());
+            if (match.isMatchFinished()) showMatchFinished();
             refreshScreen();
         } else if (intent != null && intent.getBooleanExtra(UiTheme.EXTRA_OPEN_SETTINGS, false)) {
             intent.removeExtra(UiTheme.EXTRA_OPEN_SETTINGS);
@@ -150,8 +156,14 @@ public class MainActivity extends Activity {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        boolean hadFinishedOverlay = (finishedOverlay != null);
+        pauseOverlay = null;
+        finishedOverlay = null;
         loadStyle();
         setContentView(createContent());
+        if (hadFinishedOverlay && match.isMatchFinished()) {
+            showMatchFinished();
+        }
         refreshScreen();
     }
 
@@ -224,7 +236,19 @@ public class MainActivity extends Activity {
 
     private void applyPlayerFont(TextView title, PlayerProfile profile) {
         if (title != null) RewardFonts.apply(title,
-            profile == null ? null : profile.fontId, 24f);
+            profile == null ? null : profile.fontId, nameSizeSp());
+    }
+
+    private int nameSizeSp() {
+        return scoreboardTextScale == 2 ? 32 : scoreboardTextScale == 1 ? 28 : 26;
+    }
+
+    private int nameRowDp() {
+        return scoreboardTextScale == 2 ? 50 : scoreboardTextScale == 1 ? 44 : 40;
+    }
+
+    private int scoreSizeSp() {
+        return scoreboardTextScale == 2 ? 132 : scoreboardTextScale == 1 ? 120 : 112;
     }
 
     @Override
@@ -299,14 +323,7 @@ public class MainActivity extends Activity {
         pauseButton = pause;
 
         Button undo = iconButton("↶", "Undo point.", surface);
-        undo.setOnClickListener(v -> {
-            if (!paused && match.hasPoints()) {
-                int before = match.getPlayerOneSets() + match.getPlayerTwoSets();
-                match.undo();
-                restoreSetAfterUndo(before);
-                refreshScreen();
-            }
-        });
+        undo.setOnClickListener(v -> performUndo());
         undoButton = undo;
 
         Button reset = iconButton("↺", "Start new match.", theme.playerPanelFill(AppPreferences.GREEN));
@@ -379,7 +396,7 @@ public class MainActivity extends Activity {
         });
 
         String nameText = player == 1 ? playerOneName : playerTwoName;
-        TextView title = text(nameText, 24, Color.WHITE);
+        TextView title = text(nameText, nameSizeSp(), Color.WHITE);
         applyPlayerFont(title, ProfileStore.find(this, player == 1 ? playerOneProfileId : playerTwoProfileId));
         title.setGravity(Gravity.CENTER);
         title.setSingleLine(true);
@@ -390,12 +407,15 @@ public class MainActivity extends Activity {
         sets.setGravity(Gravity.CENTER);
         UiTheme.applyTabularNumbers(sets);
 
-        TextView points = text("0", 108, Color.WHITE);
+        TextView points = text("0", scoreSizeSp(), Color.WHITE);
         points.setTypeface(Typeface.DEFAULT_BOLD);
         points.setGravity(Gravity.CENTER);
+        points.setIncludeFontPadding(false);
+        points.setPadding(0, 0, 0, dp(20));
         UiTheme.applyTabularNumbers(points);
 
         FrameLayout serveContainer = new FrameLayout(this);
+        serveContainer.setMinimumWidth(dp(64));
         serveContainer.setMinimumHeight(dp(48));
         serveContainer.setFilterTouchesWhenObscured(true);
 
@@ -432,15 +452,23 @@ public class MainActivity extends Activity {
             }
         });
 
-        TextView hint = text("TAP PANEL TO ADD 1 POINT", 16, 0xFFF4F0E9);
+        // Overlay serveContainer at the bottom of scoreFrame so toggling [L]/[R] never shifts the score digits.
+        FrameLayout scoreFrame = new FrameLayout(this);
+        scoreFrame.addView(points, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
+        scoreFrame.addView(serveContainer, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            dp(48),
+            Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL
+        ));
+
+        TextView hint = text("TAP PANEL TO ADD 1 POINT", 15, 0xFFF4F0E9);
         hint.setGravity(Gravity.CENTER);
         hint.setSingleLine(true);
 
-        panel.addView(title, new LinearLayout.LayoutParams(-1, dp(36)));
-        panel.addView(sets, new LinearLayout.LayoutParams(-1, dp(38)));
-        panel.addView(points, new LinearLayout.LayoutParams(-1, 0, 1));
-        panel.addView(serveContainer, new LinearLayout.LayoutParams(-1, dp(48)));
-        panel.addView(hint, new LinearLayout.LayoutParams(-1, dp(24)));
+        panel.addView(title, new LinearLayout.LayoutParams(-1, dp(nameRowDp())));
+        panel.addView(sets, new LinearLayout.LayoutParams(-1, dp(36)));
+        panel.addView(scoreFrame, new LinearLayout.LayoutParams(-1, 0, 1));
+        panel.addView(hint, new LinearLayout.LayoutParams(-1, dp(22)));
 
         if (player == 1) {
             playerOnePoints = points;
@@ -553,12 +581,8 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
                 if (key == remoteOne) { addPoint(1); return true; }
                 if (key == remoteTwo) { addPoint(2); return true; }
-                if (key == remoteUndo && !paused) {
-                    int before = match.getPlayerOneSets() + match.getPlayerTwoSets();
-                    match.undo();
-                    restoreSetAfterUndo(before);
-                    refreshScreen();
-                    return true;
+                if (key == remoteUndo) {
+                    if (performUndo()) return true;
                 }
                 if (key == remoteReset) { confirmReset(); return true; }
                 return true;
@@ -586,12 +610,7 @@ public class MainActivity extends Activity {
             return true;
         }
         if ("UNDO".equals(command)) {
-            if (paused) return false;
-            int before = match.getPlayerOneSets() + match.getPlayerTwoSets();
-            match.undo();
-            restoreSetAfterUndo(before);
-            refreshScreen();
-            return true;
+            return performUndo();
         }
         if ("TOGGLE_PAUSE".equals(command)) {
             if (match.isMatchFinished()) {
@@ -675,13 +694,20 @@ public class MainActivity extends Activity {
         awaitingNextGame = false;
         tickClock();
         int oldSets = match.getPlayerOneSets() + match.getPlayerTwoSets();
+        int prevP1 = match.getPlayerOnePoints();
+        int prevP2 = match.getPlayerTwoPoints();
         match.addPoint(player);
         pointTimesMs.add(matchElapsedMs);
         if (match.getPlayerOneSets() + match.getPlayerTwoSets() > oldSets) {
+            int endP1 = prevP1 + (player == 1 ? 1 : 0);
+            int endP2 = prevP2 + (player == 2 ? 1 : 0);
+            int gameNum = match.getPlayerOneSets() + match.getPlayerTwoSets();
+            lastCompletedGameSummary = "GAME " + gameNum + " FINISHED  ·  " + endP1 + ":" + endP2;
             setDurationsMs.add(currentSetElapsedMs);
             currentSetElapsedMs = 0;
             if (!match.isMatchFinished()) {
                 awaitingNextGame = true;
+                gameBreakStartMs = SystemClock.elapsedRealtime();
                 pauseMatch();
                 archiveCurrentMatch();
             }
@@ -693,6 +719,30 @@ public class MainActivity extends Activity {
             showMatchFinished();
         }
         refreshScreen();
+    }
+
+    private boolean performUndo() {
+        if (!match.hasPoints()) return false;
+        boolean wasFinished = match.isMatchFinished();
+        boolean wasAwaitingNextGame = awaitingNextGame;
+        if (paused && !wasFinished && !wasAwaitingNextGame) {
+            return false;
+        }
+        if (finishedOverlay != null) {
+            if (finishedOverlay.getParent() instanceof ViewGroup) {
+                ((ViewGroup) finishedOverlay.getParent()).removeView(finishedOverlay);
+            }
+            finishedOverlay = null;
+        }
+        int before = match.getPlayerOneSets() + match.getPlayerTwoSets();
+        match.undo();
+        restoreSetAfterUndo(before);
+        if (wasFinished || wasAwaitingNextGame) {
+            resumeMatch();
+            archiveCurrentMatch();
+        }
+        refreshScreen();
+        return true;
     }
 
     private void restoreSetAfterUndo(int before) {
@@ -719,6 +769,8 @@ public class MainActivity extends Activity {
 
     private void resetClock() {
         awaitingNextGame = false;
+        lastCompletedGameSummary = "";
+        gameBreakStartMs = 0;
         matchElapsedMs = 0;
         currentSetElapsedMs = 0;
         setDurationsMs.clear();
@@ -752,16 +804,46 @@ public class MainActivity extends Activity {
     }
 
     private void showPauseOverlay() {
-        if (match.isMatchFinished() || pauseOverlay != null || courtAlertView == null) return;
-        pauseOverlay = text("Ⅱ\nMATCH PAUSED\n\nTAP TO RESUME MATCH", 34, 0xFFFFB59A);
-        pauseOverlay.setGravity(Gravity.CENTER);
-        pauseOverlay.setTypeface(Typeface.DEFAULT_BOLD);
-        pauseOverlay.setLineSpacing(dp(6), 1f);
-        pauseOverlay.setBackgroundColor(0xE816130C);
-        pauseOverlay.setContentDescription("Match paused. Tap to resume match.");
-        pauseOverlay.setOnClickListener(v -> togglePause());
-        ((FrameLayout) courtAlertView.getParent()).addView(pauseOverlay, new FrameLayout.LayoutParams(-1, -1));
+        if (match.isMatchFinished() || courtAlertView == null) return;
+        if (pauseOverlay == null) {
+            pauseOverlay = text("", 30, 0xFFFFB59A);
+            pauseOverlay.setGravity(Gravity.CENTER);
+            pauseOverlay.setTypeface(Typeface.DEFAULT_BOLD);
+            pauseOverlay.setLineSpacing(dp(6), 1f);
+            pauseOverlay.setBackgroundColor(0xE816130C);
+            UiTheme.applyTabularNumbers(pauseOverlay);
+            pauseOverlay.setOnClickListener(v -> togglePause());
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, -1);
+            lp.topMargin = dp(60);
+            ((FrameLayout) courtAlertView.getParent()).addView(pauseOverlay, lp);
+        }
+        updatePauseOverlayText();
         courtAlertView.bringToFront();
+    }
+
+    private void updatePauseOverlayText() {
+        if (pauseOverlay == null) return;
+        if (awaitingNextGame) {
+            int nextGame = match.getPlayerOneSets() + match.getPlayerTwoSets() + 1;
+            long elapsedBreak = Math.max(0L, SystemClock.elapsedRealtime() - gameBreakStartMs);
+            long remainingSec = Math.max(0L, (WSF_GAME_INTERVAL_MS - elapsedBreak + 999L) / 1000L);
+            String intervalText = remainingSec > 0
+                ? String.format(Locale.US, "90 s INTERVAL  %02d:%02d", remainingSec / 60, remainingSec % 60)
+                : "90 s INTERVAL ENDED  ·  READY";
+            String headline = lastCompletedGameSummary.isEmpty()
+                ? "GAME FINISHED"
+                : lastCompletedGameSummary;
+            pauseOverlay.setText(
+                "✓ " + headline
+                    + "\nGAMES  " + match.getPlayerOneSets() + " : " + match.getPlayerTwoSets()
+                    + "\n" + intervalText
+                    + "\n\nTAP TO START GAME " + nextGame
+            );
+            pauseOverlay.setContentDescription(headline + ". Tap to start game " + nextGame + ".");
+        } else {
+            pauseOverlay.setText("Ⅱ\nMATCH PAUSED\n\nTAP TO RESUME MATCH");
+            pauseOverlay.setContentDescription("Match paused. Tap to resume match.");
+        }
     }
 
     private void hidePauseOverlay() {
@@ -805,7 +887,7 @@ public class MainActivity extends Activity {
         pauseButton.setContentDescription(paused ? "Resume match." : "Pause match.");
 
         if (undoButton != null) {
-            boolean hasPts = match.hasPoints() && !paused;
+            boolean hasPts = match.hasPoints() && (!paused || match.isMatchFinished() || awaitingNextGame);
             undoButton.setEnabled(hasPts);
             undoButton.setAlpha(hasPts ? 1.0f : 0.38f);
         }
@@ -977,10 +1059,18 @@ public class MainActivity extends Activity {
 
     private String ballStatus() {
         int a = match.getPlayerOnePoints(), b = match.getPlayerTwoPoints(), target = match.getPointsToWinSet();
+        boolean tieBreak = match.isTieBreak();
+        int effectiveTarget = match.getEffectivePointsTarget();
         int p = (a >= target - 1 && a > b) ? 1 : (b >= target - 1 && b > a) ? 2 : 0;
-        if (p == 0) return "GAME TO " + target + "  |  MATCH TO " + match.getSetsToWinMatch();
+        if (p == 0) {
+            if (tieBreak) {
+                return "TIE-BREAK  ·  WIN BY 2 (TO " + effectiveTarget + ")";
+            }
+            return "GAME TO " + target + "  |  MATCH TO " + match.getSetsToWinMatch();
+        }
         boolean mb = (p == 1 ? match.getPlayerOneSets() : match.getPlayerTwoSets()) == match.getSetsToWinMatch() - 1;
-        return (mb ? "MATCH BALL: " : "GAME BALL: ") + (p == 1 ? playerOneName : playerTwoName);
+        String suffix = tieBreak ? "  (TO " + effectiveTarget + ")" : "";
+        return (mb ? "MATCH BALL: " : "GAME BALL: ") + (p == 1 ? playerOneName : playerTwoName) + suffix;
     }
 
     private void loadStyle() {
@@ -998,6 +1088,7 @@ public class MainActivity extends Activity {
         playerOneColor = AppPreferences.color(this, "color1", AppPreferences.BLUE);
         playerTwoColor = AppPreferences.color(this, "color2", AppPreferences.RED);
         showServeSideIndicator = AppPreferences.showServeSideIndicator(this);
+        scoreboardTextScale = AppPreferences.scoreboardTextScale(this);
         remoteOne = AppPreferences.remote(this, "remote1", KeyEvent.KEYCODE_VOLUME_UP);
         remoteTwo = AppPreferences.remote(this, "remote2", KeyEvent.KEYCODE_VOLUME_DOWN);
         remoteUndo = AppPreferences.remote(this, "undo", KeyEvent.KEYCODE_MEDIA_PAUSE);
@@ -1175,7 +1266,8 @@ public class MainActivity extends Activity {
         if (container == null || badge == null || bg == null) return;
 
         if (!showServeSideIndicator || match.isMatchFinished()) {
-            container.setVisibility(View.GONE);
+            container.setVisibility(View.INVISIBLE);
+            container.setClickable(false);
             return;
         }
 
@@ -1214,7 +1306,7 @@ public class MainActivity extends Activity {
             String name = player == 1 ? playerOneName : playerTwoName;
             container.setContentDescription("Tap to set " + name + " as starting server.");
         } else {
-            container.setVisibility(View.GONE);
+            container.setVisibility(View.INVISIBLE);
             container.setClickable(false);
         }
     }
@@ -1231,9 +1323,15 @@ public class MainActivity extends Activity {
         if (bluetoothWatchServer != null) {
             bluetoothWatchServer.broadcastMatchEndedAsync(winnerName, finalScore);
         }
+        MatchRecord finishedRecord = buildCurrentRecord();
         finishedOverlay = new MatchFinishedView(
             this,
             winnerName,
+            finishedRecord,
+            () -> {
+                finishedOverlay = null;
+                refreshScreen();
+            },
             () -> {
                 finishedOverlay = null;
                 match.reset();
@@ -1248,15 +1346,23 @@ public class MainActivity extends Activity {
                 resumeMatch();
                 refreshScreen();
             },
-            () -> {
-                try {
-                    String json = buildCurrentRecord().toJson().toString();
-                    startActivity(new Intent(this, MatchDetailActivity.class).putExtra(MatchDetailActivity.EXTRA_RECORD, json));
-                } catch (Exception ignored) { }
-            }
+            () -> openCurrentMatchDetail(MatchDetailActivity.TAB_TIMELINE),
+            () -> openCurrentMatchDetail(MatchDetailActivity.TAB_STATS),
+            this::performUndo
         );
         ((FrameLayout) courtAlertView.getParent()).addView(finishedOverlay, new FrameLayout.LayoutParams(-1, -1));
         courtAlertView.bringToFront();
+    }
+
+    private void openCurrentMatchDetail(int initialTab) {
+        try {
+            String json = buildCurrentRecord().toJson().toString();
+            startActivity(
+                new Intent(this, MatchDetailActivity.class)
+                    .putExtra(MatchDetailActivity.EXTRA_RECORD, json)
+                    .putExtra(MatchDetailActivity.EXTRA_INITIAL_TAB, initialTab)
+            );
+        } catch (Exception ignored) { }
     }
 
     private void confirmReset() {

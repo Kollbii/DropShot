@@ -368,4 +368,145 @@ public final class SecurityAndConcurrencyTest {
         assertFalse(SupabaseSyncClient.shouldFallbackToLegacySchema(403, "Forbidden"));
         assertFalse(SupabaseSyncClient.shouldFallbackToLegacySchema(201, ""));
     }
+
+    @Test
+    public void tracksSquashTieBreakTargetsAndUndoAccurately() {
+        MatchState state = new MatchState();
+        state.configure(11, 3);
+        for (int i = 0; i < 9; i++) {
+            state.addPoint(1);
+            state.addPoint(2);
+        }
+        // At 9-9: normal game to 11
+        assertFalse(state.isTieBreak());
+        assertEquals(11, state.getEffectivePointsTarget());
+
+        // At 10-9: game ball, still target 11
+        state.addPoint(1);
+        assertFalse(state.isTieBreak());
+        assertTrue(state.isGameOrMatchBall());
+        assertEquals(11, state.getEffectivePointsTarget());
+
+        // At 10-10: tie-break starts, win-by-2 requires 12
+        state.addPoint(2);
+        assertTrue(state.isTieBreak());
+        assertFalse(state.isGameOrMatchBall());
+        assertEquals(12, state.getEffectivePointsTarget());
+
+        // At 11-10: tie-break game ball to 12
+        state.addPoint(1);
+        assertTrue(state.isTieBreak());
+        assertTrue(state.isGameOrMatchBall());
+        assertEquals(12, state.getEffectivePointsTarget());
+
+        // At 11-11: tie-break target advances to 13
+        state.addPoint(2);
+        assertTrue(state.isTieBreak());
+        assertEquals(13, state.getEffectivePointsTarget());
+
+        // At 12-11 then 13-11: Game 1 completes, Game 2 starts at 0-0
+        state.addPoint(1);
+        state.addPoint(1);
+        assertEquals(1, state.getPlayerOneSets());
+        assertEquals(0, state.getPlayerOnePoints());
+        assertFalse(state.isTieBreak());
+        assertEquals(11, state.getEffectivePointsTarget());
+
+        // Undo the game-winning point restores 12-11 tie-break state
+        state.undo();
+        assertEquals(0, state.getPlayerOneSets());
+        assertEquals(12, state.getPlayerOnePoints());
+        assertEquals(11, state.getPlayerTwoPoints());
+        assertTrue(state.isTieBreak());
+        assertEquals(13, state.getEffectivePointsTarget());
+    }
+
+    @Test
+    public void computesCourtSideAnalyticsGameScoresAndTacticalInsights() {
+        MatchState state = new MatchState();
+        state.configure(4, 2); // Best of 3 games to 4 points
+        // Game 1: P1 serves from L (picked), wins 4 straight (L -> R -> L -> R) => 4-0
+        assertTrue(state.toggleServiceSide()); // R -> L
+        state.addPoint(1); // #0: SRV P1 [L] PICK -> HOLD (1:0)
+        state.addPoint(1); // #1: SRV P1 [R] ALT  -> HOLD (2:0)
+        state.addPoint(1); // #2: SRV P1 [L] ALT  -> HOLD (3:0)
+        state.addPoint(1); // #3: SRV P1 [R] ALT  -> HOLD (4:0, Game 1 won)
+
+        // Game 2: P1 serves at 0-0 from R (picked), P2 wins side-out, then P2 wins 3 more => 0-4
+        state.addPoint(2); // #4: SRV P1 [R] PICK -> OUT  (0:1)
+        assertTrue(state.toggleServiceSide()); // P2 picks L on handout
+        state.addPoint(2); // #5: SRV P2 [L] PICK -> HOLD (0:2)
+        state.addPoint(2); // #6: SRV P2 [R] ALT  -> HOLD (0:3)
+        state.addPoint(2); // #7: SRV P2 [L] ALT  -> HOLD (0:4, Game 2 won)
+
+        // Game 3: P2 serves at 0-0 from R (picked), P1 breaks, P1 picks L and runs out => 4-0
+        state.addPoint(1); // #8: SRV P2 [R] PICK -> OUT  (1:0)
+        assertTrue(state.toggleServiceSide()); // P1 picks L
+        state.addPoint(1); // #9:  SRV P1 [L] PICK -> HOLD (2:0)
+        state.addPoint(1); // #10: SRV P1 [R] ALT  -> HOLD (3:0)
+        state.addPoint(1); // #11: SRV P1 [L] ALT  -> HOLD (4:0, Match won 2-1)
+        assertTrue(state.isMatchFinished());
+
+        java.util.List<Long> times = java.util.Arrays.asList(
+            5000L, 10000L, 15000L, 20000L,
+            30000L, 35000L, 40000L, 45000L,
+            55000L, 60000L, 65000L, 70000L
+        );
+        MatchRecord record = new MatchRecord(
+            42L,
+            "Alice",
+            "Bob",
+            "11111111-2222-4333-8444-555555555555",
+            "22222222-2222-4333-8444-555555555555",
+            state.getPlayerOneSets(),
+            state.getPlayerTwoSets(),
+            state.getPlayerOnePoints(),
+            state.getPlayerTwoPoints(),
+            state.getPointsToWinSet(),
+            state.getSetsToWinMatch(),
+            state.isMatchFinished(),
+            1700000000000L,
+            state.getPointWinners(),
+            70000L,
+            java.util.Arrays.asList(20000L, 25000L, 25000L),
+            times,
+            false,
+            AppPreferences.BLUE,
+            AppPreferences.RED,
+            state.getInitialServer(),
+            state.getEncodedPointSides()
+        );
+
+        assertEquals("4-0, 0-4, 4-0", record.formattedGameScores());
+        MatchRecord.Analytics a = record.analytics();
+        assertEquals(3, a.gameSegments.size());
+        assertEquals(8, a.points[0]);
+        assertEquals(4, a.points[1]);
+
+        // Alice (P1) served 8 times: 4 from [L] (won all 4), 4 from [R] (won 3, lost 1 at #4)
+        assertEquals(4, a.leftServesTotal[0]);
+        assertEquals(4, a.leftServesWon[0]);
+        assertEquals(4, a.rightServesTotal[0]);
+        assertEquals(3, a.rightServesWon[0]);
+        // Alice picked 3 times (#0 L won, #4 R lost, #9 L won) and alternated 5 times (all 5 won)
+        assertEquals(3, a.pickedServesTotal[0]);
+        assertEquals(2, a.pickedServesWon[0]);
+        assertEquals(5, a.altServesTotal[0]);
+        assertEquals(5, a.altServesWon[0]);
+        // Alice broke Bob's [R] serve once (#8) out of 2 [R] serves by Bob (#6, #8)
+        assertEquals(2, a.receivesVsRightTotal[0]);
+        assertEquals(1, a.receivesVsRightWon[0]);
+
+        // ChartUtils inspection and binary search verification
+        assertEquals(4, ChartUtils.binarySearchNearestPoint(record, 0, 12, 70000L, 29000.0));
+        String inspect4 = ChartUtils.formatPointInspection(record, 4, 70000L);
+        assertTrue(inspect4.contains("[R]"));
+        assertTrue(inspect4.contains("PICK · SIDE-OUT"));
+
+        // Tactical insight verification: stronger [L] box that is under-picked triggers recommendation
+        String underPickedLeft = CourtSideDiagramView.buildTacticalInsight(8, 10, 1, 4, 10, 5);
+        assertTrue(underPickedLeft.contains("pick [L] more"));
+        String balanced = CourtSideDiagramView.buildTacticalInsight(6, 10, 3, 6, 10, 3);
+        assertEquals("Balanced [L] / [R] serve hold", balanced);
+    }
 }

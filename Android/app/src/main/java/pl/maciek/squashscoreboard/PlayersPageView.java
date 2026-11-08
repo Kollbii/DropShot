@@ -125,8 +125,8 @@ public class PlayersPageView extends LinearLayout {
             }
         }
 
-        Button lootbox = theme.outlinedButton(activity, "Open lootbox prototype");
-        lootbox.setContentDescription("Open the lootbox prototype from player profiles");
+        Button lootbox = theme.outlinedButton(activity, "Open reward lootbox");
+        lootbox.setContentDescription("Open the reward lootbox.");
         lootbox.setOnClickListener(v -> chooseLootboxPlayer());
         LinearLayout.LayoutParams lootboxParams = new LinearLayout.LayoutParams(-1, dp(48));
         lootboxParams.topMargin = dp(16);
@@ -254,7 +254,7 @@ public class PlayersPageView extends LinearLayout {
                     .putExtra(LootboxActivity.EXTRA_PROFILE_ID, player.id)
                     .putExtra(LootboxActivity.EXTRA_PLAYER_NAME, player.name));
             })
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton("Cancel action", null)
             .show();
     }
 

@@ -4,27 +4,53 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.res.Configuration;
-import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.Spinner;
 import android.widget.TextView;
 import org.json.JSONObject;
-import java.util.Locale;
 
+/**
+ * Unified match detail screen with a single compact top bar (Back, View Switcher spinner,
+ * and Manage match dialog) and a 4-page swipeable {@link ChartPager} for Point chart,
+ * Game chart, Game scores, and Match statistics.
+ * Maximizes vertical screen visibility for {@link MatchStatsView} and deduplicates
+ * the former split between preview charts and fullscreen charts.
+ */
 public class MatchDetailActivity extends Activity {
     public static final String EXTRA_RECORD = "record";
+    public static final String EXTRA_INITIAL_TAB = "initialTab";
+    public static final int TAB_TIMELINE = 0;
+    public static final int TAB_PROGRESS = 1;
+    public static final int TAB_SETS = 2;
+    public static final int TAB_STATS = 3;
+
     private UiTheme theme;
     private MatchRecord currentRecord;
-    private Button[] tabButtons;
+    private int currentTab = TAB_TIMELINE;
+    private boolean updatingTabSelection;
+    private Spinner tabSpinner;
+    private LinearLayout chartFooterBar;
+    private LinearLayout legendView;
+    private LinearLayout zoomControlsGroup;
+    private Button showAllGamesBtn;
 
     @Override
     public void onCreate(Bundle state) {
         super.onCreate(state);
         try {
-            currentRecord = MatchRecord.fromJson(new JSONObject(getIntent().getStringExtra(EXTRA_RECORD)));
+            String rawRecord = getIntent().getStringExtra(EXTRA_RECORD);
+            currentRecord = MatchRecord.fromJson(new JSONObject(rawRecord));
+            int requestedTab = getIntent().getIntExtra(
+                EXTRA_INITIAL_TAB,
+                getIntent().getIntExtra(ChartFullscreenActivity.EXTRA_CHART, TAB_TIMELINE)
+            );
+            currentTab = Math.max(0, Math.min(3, requestedTab));
             showRecord(currentRecord);
         } catch (Exception e) {
             finish();
@@ -41,10 +67,10 @@ public class MatchDetailActivity extends Activity {
         theme = new UiTheme(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(10), dp(16), dp(10));
+        root.setPadding(dp(12), dp(6), dp(12), dp(6));
         root.setBackgroundColor(theme.background);
 
-        // Top Bar
+        // Single Compact Top Bar (48 dp) to maximize vertical visibility for Statistics & Charts
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
 
@@ -52,202 +78,214 @@ public class MatchDetailActivity extends Activity {
         back.setContentDescription("Go back.");
         back.setOnClickListener(v -> finish());
 
-        TextView names = text(
-            r.playerOneName + "  vs  " + r.playerTwoName + "  (" + r.playerOneSets + " : " + r.playerTwoSets + ")",
-            20,
-            theme.onSurface
-        );
-        names.setTypeface(Typeface.DEFAULT_BOLD);
-        names.setGravity(Gravity.CENTER);
-        UiTheme.applyTabularNumbers(names);
+        int[] sets = r.playedSets();
+        int dispS1 = Math.max(r.playerOneSets, sets[0]);
+        int dispS2 = Math.max(r.playerTwoSets, sets[1]);
+        String scoreSummary = dispS1 + ":" + dispS2;
 
-        Button deleteBtn = theme.dangerButton(this, "Delete match");
-        deleteBtn.setOnClickListener(v ->
-            new AlertDialog.Builder(this)
-                .setTitle("Delete this match?")
-                .setMessage("The app will delete the match " + r.playerOneName + " vs " + r.playerTwoName + " permanently.")
-                .setNegativeButton("Cancel action", null)
-                .setPositiveButton("Delete match", (d, w) -> {
-                    MatchHistoryStore.remove(this, r.id);
-                    finish();
-                })
-                .show()
-        );
+        String[] viewChoices = {
+            "1/4 · Point chart (" + scoreSummary + ")",
+            "2/4 · Game chart (" + scoreSummary + ")",
+            "3/4 · Game scores (" + scoreSummary + ")",
+            "4/4 · Statistics (" + scoreSummary + ")"
+        };
+        tabSpinner = theme.styledSpinner(this, viewChoices, currentTab);
+        tabSpinner.setContentDescription("Select match view or swipe left and right.");
+
+        Button manageBtn = theme.tonalButton(this, "Manage match");
+        manageBtn.setContentDescription("Manage match: resume, add 3 games, or delete match.");
+        manageBtn.setOnClickListener(v -> showManageMatchDialog(r, dispS1, dispS2));
 
         header.addView(back, new LinearLayout.LayoutParams(-2, dp(48)));
-        header.addView(names, new LinearLayout.LayoutParams(0, dp(48), 1f));
-        header.addView(deleteBtn, new LinearLayout.LayoutParams(-2, dp(48)));
-        root.addView(header, new LinearLayout.LayoutParams(-1, dp(52)));
+        LinearLayout.LayoutParams spinnerLp = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        spinnerLp.leftMargin = dp(6);
+        spinnerLp.rightMargin = dp(6);
+        header.addView(tabSpinner, spinnerLp);
+        header.addView(manageBtn, new LinearLayout.LayoutParams(-2, dp(48)));
+        root.addView(header, new LinearLayout.LayoutParams(-1, dp(50)));
 
-        // Summary Info Row
-        String durText = r.durationMs > 0
-            ? "MATCH DURATION: " + formatDuration(r.durationMs)
-            : "MATCH DURATION: no data";
-        TextView meta = text(durText + "   |   " + setTimes(r), 16, theme.onSurfaceVariant);
-        meta.setGravity(Gravity.CENTER);
-        UiTheme.applyTabularNumbers(meta);
-        meta.setPadding(0, dp(4), 0, dp(4));
-        root.addView(meta, new LinearLayout.LayoutParams(-1, -2));
-
-        // 4 Direct Tab Buttons (Point timeline, Game progress, Game scores, Match statistics)
-        LinearLayout tabRow = new LinearLayout(this);
-        tabRow.setOrientation(LinearLayout.HORIZONTAL);
-        tabRow.setGravity(Gravity.CENTER_VERTICAL);
-        tabRow.setPadding(0, dp(4), 0, dp(4));
-
-        String[] tabTitles = {
-            "Show point chart",
-            "Show game chart",
-            "Show game scores",
-            "Show statistics"
-        };
-        tabButtons = new Button[4];
-
-        TextView caption = text("POINT TIMELINE  ·  TAP CHART TO OPEN FULLSCREEN", 16, theme.onSurfaceVariant);
-        caption.setGravity(Gravity.CENTER);
-
+        // 4-Page Swipeable Chart & Statistics Pager
         ChartPager charts = new ChartPager(this);
         charts.setPageCount(4);
         charts.setHorizontalScrollBarEnabled(false);
         LinearLayout pages = new LinearLayout(this);
         pages.setOrientation(LinearLayout.HORIZONTAL);
         charts.addView(pages);
-
-        for (int i = 0; i < 4; i++) {
-            final int pageIndex = i;
-            Button tab = new Button(this);
-            tab.setAllCaps(false);
-            tab.setTextSize(15);
-            tab.setMinHeight(dp(48));
-            tab.setMinimumHeight(dp(48));
-            tab.setPadding(dp(8), 0, dp(8), 0);
-            tab.setText(tabTitles[i]);
-            tab.setOnClickListener(v -> {
-                int w = Math.max(1, charts.getWidth());
-                charts.smoothScrollTo(pageIndex * w, 0);
-                updateTabButtons(pageIndex, caption);
-            });
-            tabButtons[i] = tab;
-            LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, dp(48), 1f);
-            tlp.setMargins(dp(3), 0, dp(3), 0);
-            tabRow.addView(tab, tlp);
-        }
-        root.addView(tabRow, new LinearLayout.LayoutParams(-1, dp(52)));
-        root.addView(caption, new LinearLayout.LayoutParams(-1, dp(26)));
         root.addView(charts, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        updateTabButtons(0, caption);
+        // Interactive charts + Statistics view
+        ScoreChartView scoreView = new ScoreChartView(this, r);
+        scoreView.setInteractive(true);
+
+        SetProgressChartView progressView = new SetProgressChartView(this, r);
+        progressView.setInteractive(true);
+
+        SetsChartView setsView = new SetsChartView(this, r);
+        MatchStatsView statsView = new MatchStatsView(this, r);
+
+        // Chart-only footer bar (Legend + inline Zoom / Game filter controls; hidden on Statistics tab)
+        chartFooterBar = new LinearLayout(this);
+        chartFooterBar.setOrientation(LinearLayout.HORIZONTAL);
+        chartFooterBar.setGravity(Gravity.CENTER_VERTICAL);
+        chartFooterBar.setPadding(0, dp(2), 0, 0);
+
+        legendView = theme.createChartLegend(this, r, currentTab == TAB_SETS);
+        chartFooterBar.addView(legendView, new LinearLayout.LayoutParams(0, dp(44), 1f));
+
+        zoomControlsGroup = new LinearLayout(this);
+        zoomControlsGroup.setOrientation(LinearLayout.HORIZONTAL);
+        zoomControlsGroup.setGravity(Gravity.CENTER_VERTICAL);
+        Button zoomIn = compactButton("Zoom +");
+        Button zoomOut = compactButton("Zoom −");
+        Button resetZoom = compactButton("Reset");
+        zoomIn.setOnClickListener(v -> scoreView.zoomBy(1.5));
+        zoomOut.setOnClickListener(v -> scoreView.zoomBy(1.0 / 1.5));
+        resetZoom.setOnClickListener(v -> scoreView.resetZoom());
+        zoomControlsGroup.addView(zoomIn, compactBtnMargin());
+        zoomControlsGroup.addView(zoomOut, compactBtnMargin());
+        zoomControlsGroup.addView(resetZoom, compactBtnMargin());
+        chartFooterBar.addView(zoomControlsGroup, new LinearLayout.LayoutParams(-2, dp(48)));
+
+        showAllGamesBtn = compactButton("Show all games");
+        showAllGamesBtn.setVisibility(View.GONE);
+        showAllGamesBtn.setOnClickListener(v -> progressView.showAllSets());
+        progressView.setOnSetFocusChanged(number ->
+            showAllGamesBtn.setVisibility(currentTab == TAB_PROGRESS && number > 0 ? View.VISIBLE : View.GONE)
+        );
+        chartFooterBar.addView(showAllGamesBtn, compactBtnMargin());
+
+        root.addView(chartFooterBar, new LinearLayout.LayoutParams(-1, dp(48)));
+
+        updatePageChrome(currentTab, r);
+
+        tabSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) { }
+
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (updatingTabSelection || position == currentTab) return;
+                currentTab = position;
+                charts.scrollToPage(position, true);
+                updatePageChrome(position, r);
+            }
+        });
+
+        charts.setOnPageChangeListener(page -> {
+            currentTab = page;
+            syncSpinnerAndChrome(page, r);
+        });
 
         charts.post(() -> {
             int w = Math.max(1, charts.getWidth());
-            View score = new ScoreChartView(this, r);
-            View progress = new SetProgressChartView(this, r);
-            View sets = new SetsChartView(this, r);
-            View stats = new MatchStatsView(this, r);
-            score.setOnClickListener(v -> openFullscreen(0));
-            progress.setOnClickListener(v -> openFullscreen(1));
-            sets.setOnClickListener(v -> openFullscreen(2));
             pages.removeAllViews();
-            pages.addView(score, new LinearLayout.LayoutParams(w, -1));
-            pages.addView(progress, new LinearLayout.LayoutParams(w, -1));
-            pages.addView(sets, new LinearLayout.LayoutParams(w, -1));
-            pages.addView(stats, new LinearLayout.LayoutParams(w, -1));
+            pages.addView(scoreView, new LinearLayout.LayoutParams(w, -1));
+            pages.addView(progressView, new LinearLayout.LayoutParams(w, -1));
+            pages.addView(setsView, new LinearLayout.LayoutParams(w, -1));
+            pages.addView(statsView, new LinearLayout.LayoutParams(w, -1));
+            if (currentTab > 0) {
+                charts.scrollTo(currentTab * w, 0);
+            }
             charts.setOnScrollChangeListener((v, x, y, ox, oy) -> {
                 int p = Math.max(0, Math.min(3, Math.round(x / (float) Math.max(1, w))));
-                updateTabButtons(p, caption);
+                if (p != currentTab) {
+                    currentTab = p;
+                    syncSpinnerAndChrome(p, r);
+                }
             });
         });
-
-        // Accessible Legend with non-color symbols + line style descriptions
-        LinearLayout legend = new LinearLayout(this);
-        legend.setGravity(Gravity.CENTER);
-        TextView p1 = text(
-            r.playerOneName + " (solid line)",
-            16,
-            theme.playerAccentOnSurface(r.playerOneColor)
-        );
-        TextView p2 = text(
-            r.playerTwoName + " (dashed line)",
-            16,
-            theme.playerAccentOnSurface(r.playerTwoColor)
-        );
-        p1.setTypeface(Typeface.DEFAULT_BOLD);
-        p2.setTypeface(Typeface.DEFAULT_BOLD);
-        p1.setGravity(Gravity.CENTER);
-        p2.setGravity(Gravity.CENTER);
-        legend.addView(p1, new LinearLayout.LayoutParams(0, -1, 1f));
-        legend.addView(p2, new LinearLayout.LayoutParams(0, -1, 1f));
-        root.addView(legend, new LinearLayout.LayoutParams(-1, dp(30)));
-
-        Button resume = theme.primaryButton(this, r.finished ? "Add 3 games on board" : "Resume match");
-        resume.setOnClickListener(v -> {
-            Intent intent = new Intent(this, MainActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            intent.putExtra(EXTRA_RECORD, getIntent().getStringExtra(EXTRA_RECORD));
-            intent.putExtra("continue", r.finished);
-            startActivity(intent);
-            finish();
-        });
-        LinearLayout.LayoutParams resumeParams = new LinearLayout.LayoutParams(-1, dp(48));
-        resumeParams.topMargin = dp(4);
-        root.addView(resume, resumeParams);
 
         setContentView(root);
     }
 
-    private void updateTabButtons(int selectedPage, TextView caption) {
-        if (tabButtons == null) return;
-        for (int i = 0; i < tabButtons.length; i++) {
-            Button b = tabButtons[i];
-            if (b == null) continue;
-            boolean active = (i == selectedPage);
-            b.setTypeface(active ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
-            b.setTextColor(active ? theme.onSecondaryContainer : theme.onSurfaceVariant);
-            b.setBackground(theme.interactiveBackground(
-                this,
-                active ? theme.secondaryContainer : theme.surfaceLow,
-                12,
-                1,
-                active ? theme.primary : theme.outline
-            ));
+    private void syncSpinnerAndChrome(int page, MatchRecord r) {
+        updatingTabSelection = true;
+        if (tabSpinner != null && tabSpinner.getSelectedItemPosition() != page) {
+            tabSpinner.setSelection(page);
         }
-        if (caption != null) {
-            if (selectedPage == 0) caption.setText("POINT TIMELINE  ·  TAP CHART TO OPEN FULLSCREEN");
-            else if (selectedPage == 1) caption.setText("GAME PROGRESS  ·  TAP CHART TO OPEN FULLSCREEN");
-            else if (selectedPage == 2) caption.setText("GAME SCORES  ·  TAP CHART TO OPEN FULLSCREEN");
-            else caption.setText("MATCH STATISTICS");
+        updatingTabSelection = false;
+        updatePageChrome(page, r);
+    }
+
+    private void updatePageChrome(int selectedPage, MatchRecord r) {
+        if (chartFooterBar == null) return;
+        if (selectedPage == TAB_STATS) {
+            chartFooterBar.setVisibility(View.GONE);
+            return;
+        }
+        chartFooterBar.setVisibility(View.VISIBLE);
+        if (zoomControlsGroup != null) {
+            zoomControlsGroup.setVisibility(selectedPage == TAB_TIMELINE ? View.VISIBLE : View.GONE);
+        }
+        if (showAllGamesBtn != null && selectedPage != TAB_PROGRESS) {
+            showAllGamesBtn.setVisibility(View.GONE);
+        }
+        if (legendView != null && legendView.getChildCount() >= 2) {
+            String styleOne = selectedPage == TAB_SETS ? " (left bar)" : " (solid)";
+            String styleTwo = selectedPage == TAB_SETS ? " (right bar)" : " (dashed)";
+            ((TextView) legendView.getChildAt(0)).setText(UiTheme.playerSymbol(r.playerOneColor) + " " + r.playerOneName + styleOne);
+            ((TextView) legendView.getChildAt(1)).setText(UiTheme.playerSymbol(r.playerTwoColor) + " " + r.playerTwoName + styleTwo);
         }
     }
 
-    private void openFullscreen(int chart) {
-        startActivity(
-            new Intent(this, ChartFullscreenActivity.class)
-                .putExtra(ChartFullscreenActivity.EXTRA_RECORD, getIntent().getStringExtra(EXTRA_RECORD))
-                .putExtra(ChartFullscreenActivity.EXTRA_CHART, chart)
-        );
+    private void showManageMatchDialog(MatchRecord r, int dispS1, int dispS2) {
+        String gameScores = r.formattedGameScores();
+        String message = "Score: " + dispS1 + " : " + dispS2
+            + (gameScores.isEmpty() ? "" : "  (" + gameScores + ")")
+            + "\n" + MatchStatsView.formatTimingSummary(r)
+            + "\n\nTip: Swipe left or right to switch between Point chart, Game chart, Game scores, and Statistics.";
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle(r.playerOneName + " vs " + r.playerTwoName)
+            .setMessage(message)
+            .setNegativeButton("Close dialog", null)
+            .setNeutralButton("Delete match", (d, w) -> confirmDeleteMatch(r))
+            .setPositiveButton(r.finished ? "Add 3 games on board" : "Resume match", (d, w) -> resumeOrContinueMatch(r))
+            .create();
+
+        dialog.setOnShowListener(ignored -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(new ColorDrawable(theme.surface));
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(theme.onSurfaceVariant);
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor(theme.error);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(theme.primary);
+        });
+        dialog.show();
     }
 
-    private String setTimes(MatchRecord r) {
-        if (r.setDurationsMs.isEmpty()) return "GAME DURATIONS: no data";
-        StringBuilder s = new StringBuilder("GAME DURATIONS: ");
-        for (int i = 0; i < r.setDurationsMs.size(); i++) {
-            if (i > 0) s.append("  ·  ");
-            s.append("G").append(i + 1).append(" ").append(formatDuration(r.setDurationsMs.get(i)));
-        }
-        return s.toString();
+    private void resumeOrContinueMatch(MatchRecord r) {
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        intent.putExtra(EXTRA_RECORD, getIntent().getStringExtra(EXTRA_RECORD));
+        intent.putExtra("continue", r.finished);
+        startActivity(intent);
+        finish();
     }
 
-    private String formatDuration(long ms) {
-        long s = Math.max(0, ms) / 1000;
-        return String.format(Locale.US, "%02d:%02d", s / 60, s % 60);
+    private void confirmDeleteMatch(MatchRecord r) {
+        new AlertDialog.Builder(this)
+            .setTitle("Delete this match?")
+            .setMessage("The app will delete the match " + r.playerOneName + " vs " + r.playerTwoName + " permanently.")
+            .setNegativeButton("Cancel action", null)
+            .setPositiveButton("Delete match", (d, w) -> {
+                MatchHistoryStore.remove(this, r.id);
+                finish();
+            })
+            .show();
     }
 
-    private TextView text(String v, int size, int c) {
-        TextView t = new TextView(this);
-        t.setText(v);
-        t.setTextSize(size);
-        t.setTextColor(c);
-        return t;
+    private Button compactButton(String label) {
+        Button b = theme.outlinedButton(this, label);
+        b.setTextSize(13);
+        b.setPadding(dp(10), 0, dp(10), 0);
+        return b;
+    }
+
+    private LinearLayout.LayoutParams compactBtnMargin() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(48));
+        lp.leftMargin = dp(4);
+        return lp;
     }
 
     private int dp(int v) {

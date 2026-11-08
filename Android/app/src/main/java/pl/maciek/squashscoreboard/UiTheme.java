@@ -199,6 +199,35 @@ public final class UiTheme {
         view.setFontFeatureSettings("tnum");
     }
 
+    /**
+     * Creates a shared player legend bar showing player colors, non-color symbols, and line/bar styles.
+     * Used across {@link MatchDetailActivity} and {@link ChartFullscreenActivity}.
+     */
+    public LinearLayout createChartLegend(Context context, MatchRecord r, boolean isBarChart) {
+        LinearLayout legend = new LinearLayout(context);
+        legend.setGravity(Gravity.CENTER);
+        String styleOne = isBarChart ? " (left bar)" : " (solid line)";
+        String styleTwo = isBarChart ? " (right bar)" : " (dashed line)";
+
+        TextView p1 = new TextView(context);
+        p1.setText(playerSymbol(r.playerOneColor) + " " + r.playerOneName + styleOne);
+        p1.setTextSize(15);
+        p1.setTextColor(playerAccentOnSurface(r.playerOneColor));
+        p1.setTypeface(Typeface.DEFAULT_BOLD);
+        p1.setGravity(Gravity.CENTER);
+
+        TextView p2 = new TextView(context);
+        p2.setText(playerSymbol(r.playerTwoColor) + " " + r.playerTwoName + styleTwo);
+        p2.setTextSize(15);
+        p2.setTextColor(playerAccentOnSurface(r.playerTwoColor));
+        p2.setTypeface(Typeface.DEFAULT_BOLD);
+        p2.setGravity(Gravity.CENTER);
+
+        legend.addView(p1, new LinearLayout.LayoutParams(0, -1, 1f));
+        legend.addView(p2, new LinearLayout.LayoutParams(0, -1, 1f));
+        return legend;
+    }
+
     public GradientDrawable roundedBox(int fillColor, int cornerDp, int strokeDp, int strokeColor, Context context) {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(fillColor);

@@ -8,30 +8,32 @@ import android.graphics.Path;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
-import java.util.ArrayList;
-import java.util.Locale;
+import java.util.List;
 
 /** Each game gets its own score timeline, spaced by recorded point times. */
 public final class SetProgressChartView extends View {
     public interface OnSetFocusChanged { void onSetFocusChanged(int setNumber); }
     private final MatchRecord record;
-    private final ArrayList<int[]> cachedSets;
+    private final List<int[]> cachedSets;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path firstPath = new Path();
     private final Path secondPath = new Path();
     private final DashPathEffect dashEffect;
     private final UiTheme theme;
     private final ScaleGestureDetector scaleDetector;
+    private final long cachedAxisDuration;
     private boolean interactive, dragged;
     private float zoom = 1, pan, lastX, downX;
     private int selected = -1;
+    private String selectedLabel = "";
     private int focusedSet = -1;
     private OnSetFocusChanged focusListener;
 
     public SetProgressChartView(Context context, MatchRecord record) {
         super(context);
         this.record = record;
-        this.cachedSets = split();
+        this.cachedSets = record.analytics().gameSegments;
+        this.cachedAxisDuration = ChartUtils.axisDurationMs(record);
         this.theme = new UiTheme(context);
         this.dashEffect = new DashPathEffect(new float[]{dp(10), dp(6)}, 0);
         setContentDescription("Game progress chart for " + record.playerOneName + " versus " + record.playerTwoName + ".");
@@ -54,6 +56,7 @@ public final class SetProgressChartView extends View {
     public void showAllSets() {
         focusedSet = -1;
         selected = -1;
+        selectedLabel = "";
         zoom = 1;
         pan = 0;
         if (focusListener != null) focusListener.onSetFocusChanged(0);
@@ -65,7 +68,7 @@ public final class SetProgressChartView extends View {
         super.onDraw(canvas);
         float left = dp(42), top = dp(36), right = getWidth() - dp(16), bottom = getHeight() - dp(50);
         if (right <= left || bottom <= top) return;
-        ArrayList<int[]> sets = cachedSets;
+        List<int[]> sets = cachedSets;
         int visibleCount = focusedSet < 0 ? sets.size() : 1;
         float setWidth = (right - left) * zoom / Math.max(1, visibleCount);
         boolean recorded = hasRecordedTimes();
@@ -81,10 +84,9 @@ public final class SetProgressChartView extends View {
             float x0 = left + visibleIndex * setWidth - pan + dp(5), x1 = left + (visibleIndex + 1) * setWidth - pan - dp(5);
             if (x1 < left || x0 > right) continue;
             long start = segment[0] == 0 ? 0 : pointTime(segment[0] - 1);
-            long end = pointTime(segment[1] - 1);
+            long end = segment[1] > segment[0] ? pointTime(segment[1] - 1) : start;
             long span = Math.max(1, end - start);
-            int a = 0, b = 0;
-            for (int i = segment[0]; i < segment[1]; i++) if (record.pointWinners.get(i) == 1) a++; else b++;
+            int a = segment[2], b = segment[3];
             int max = Math.max(1, Math.max(a, b));
 
             paint.setColor(theme.outlineVariant);
@@ -142,49 +144,22 @@ public final class SetProgressChartView extends View {
         paint.setTextAlign(Paint.Align.CENTER);
         paint.setColor(theme.onSurfaceVariant);
         paint.setTextSize(dp(12));
-        String note = recorded ? "MATCH TIME" : "ESTIMATED DURATION FOR OLD RECORD";
-        if (selected >= 0) {
-            MatchRecord.PointScore score = record.scoreAtPoint(selected);
-            String srvName = score.server == 2 ? record.playerTwoName : record.playerOneName;
-            note = "G" + score.setNumber + " " + score.pointsOne + ":" + score.pointsTwo
-                + " · SRV: " + srvName + " [" + score.serviceSide + "] (" + (score.sidePicked ? "PICK" : "ALT") + ") · "
-                + formatPrecise(pointTime(selected));
-        }
+        String note = selected >= 0 && !selectedLabel.isEmpty()
+            ? selectedLabel
+            : (recorded ? "MATCH TIME" : "ESTIMATED DURATION FOR OLD RECORD");
         canvas.drawText(note, (left + right) / 2, getHeight() - dp(6), paint);
     }
 
-    private ArrayList<int[]> split() {
-        ArrayList<int[]> out = new ArrayList<>();
-        int a = 0, b = 0, start = 0;
-        for (int i = 0; i < record.pointWinners.size(); i++) {
-            if (record.pointWinners.get(i) == 1) a++; else b++;
-            if (Math.max(a, b) >= record.pointsToWinSet && Math.abs(a - b) >= 2) {
-                out.add(new int[]{start, i + 1});
-                start = i + 1;
-                a = 0;
-                b = 0;
-            }
-        }
-        if (start < record.pointWinners.size()) out.add(new int[]{start, record.pointWinners.size()});
-        return out;
-    }
-
     private boolean hasRecordedTimes() {
-        return !record.pointTimesMs.isEmpty() && record.pointTimesMs.size() == record.pointWinners.size();
+        return ChartUtils.hasRecordedTimes(record);
     }
 
     private long pointTime(int index) {
-        if (hasRecordedTimes()) return record.pointTimesMs.get(index);
-        return Math.max(1, record.durationMs) * (index + 1) / Math.max(1, record.pointWinners.size());
+        return ChartUtils.pointTimeMs(record, index, cachedAxisDuration);
     }
 
     private String format(long ms) {
-        long seconds = ms / 1000;
-        return String.format(Locale.US, "%d:%02d", seconds / 60, seconds % 60);
-    }
-
-    private String formatPrecise(long ms) {
-        return String.format(Locale.US, "%d:%02d.%03d", ms / 60000, (ms / 1000) % 60, ms % 1000);
+        return ChartUtils.formatClock(ms);
     }
 
     private void clampPan() {
@@ -197,15 +172,25 @@ public final class SetProgressChartView extends View {
         scaleDetector.onTouchEvent(event);
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                getParent().requestDisallowInterceptTouchEvent(true);
+                if (zoom > 1.01f && getParent() != null) {
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                }
                 downX = lastX = event.getX();
                 dragged = false;
                 return true;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                if (getParent() != null) {
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                }
+                return true;
             case MotionEvent.ACTION_MOVE:
+                if (scaleDetector.isInProgress() && getParent() != null) {
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                }
                 if (event.getPointerCount() == 1 && !scaleDetector.isInProgress()) {
                     float dx = event.getX() - lastX;
                     if (Math.abs(event.getX() - downX) > dp(8)) dragged = true;
-                    if (dragged) {
+                    if (dragged && zoom > 1.01f) {
                         pan -= dx;
                         clampPan();
                         invalidate();
@@ -225,7 +210,7 @@ public final class SetProgressChartView extends View {
     }
 
     private void selectNearest(float x) {
-        ArrayList<int[]> sets = cachedSets;
+        List<int[]> sets = cachedSets;
         if (sets.isEmpty()) return;
         float left = dp(42), width = Math.max(1, getWidth() - dp(58));
         if (x < left || x > getWidth() - dp(16)) return;
@@ -234,6 +219,7 @@ public final class SetProgressChartView extends View {
         if (focusedSet < 0) {
             focusedSet = set;
             selected = -1;
+            selectedLabel = "";
             zoom = 1;
             pan = 0;
             if (focusListener != null) focusListener.onSetFocusChanged(set + 1);
@@ -245,22 +231,8 @@ public final class SetProgressChartView extends View {
         float x0 = left + dp(5) - pan, x1 = left + setWidth - dp(5) - pan;
         long start = segment[0] == 0 ? 0 : pointTime(segment[0] - 1), end = pointTime(segment[1] - 1);
         double wanted = start + (x - x0) / Math.max(1, x1 - x0) * (end - start);
-        int lo = segment[0], hi = segment[1] - 1;
-        while (lo < hi) {
-            int mid = (lo + hi) >>> 1;
-            if (pointTime(mid) < wanted) {
-                lo = mid + 1;
-            } else {
-                hi = mid;
-            }
-        }
-        int bestIndex = lo;
-        if (lo > segment[0]) {
-            double diffPrev = Math.abs(pointTime(lo - 1) - wanted);
-            double diffCurr = Math.abs(pointTime(lo) - wanted);
-            if (diffPrev <= diffCurr) bestIndex = lo - 1;
-        }
-        selected = bestIndex;
+        selected = ChartUtils.binarySearchNearestPoint(record, segment[0], segment[1], cachedAxisDuration, wanted);
+        selectedLabel = ChartUtils.formatPointInspection(record, selected, cachedAxisDuration);
         invalidate();
     }
 
